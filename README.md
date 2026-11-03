@@ -158,7 +158,7 @@ Exact version matrix: Gradle 8.9, AGP 8.7.3, Kotlin 2.0.21, KSP 2.0.21-1.0.25, C
 
 ## 9. Honest limitations
 
-- **No APK was compiled here**: no JDK, Gradle installation, Android SDK or emulator/device. The complete Gradle/Kotlin source tree, pinned version matrix and CI build workflow are provided; `scripts/check_android_sources.py` validates structure without a JDK. Exact build steps are in `docs/android.md` and `docs/limitations.md`.
+- **No APK was compiled here**: no JDK, Gradle installation, Android SDK or emulator/device. The complete Gradle/Kotlin source tree, pinned version matrix and CI build workflow are provided; `scripts/check_android_sources.py` validates structure without a JDK. The `android-build.yml` workflow does attempt `./gradlew :app:assembleDebug` on a hosted runner; exact local build steps are in `docs/android.md` and `docs/limitations.md`.
 - **No physical-device tests** were run; the device test plan is in `docs/testing.md`.
 - **Headless Blender binary is not installed in this sandbox.** The pipeline therefore processes GLB/glTF/BVH with its real pure-Python implementation locally and emits a `BLENDER_UNAVAILABLE` WARNING for FBX/OBJ/STL/PLY/DAE. CI installs Blender 4.2.23 LTS and runs `processing/blender/*.py`. No fake FBX parsing is claimed.
 - **S3 publication and signed GitHub releases** are implemented but unexecuted: no storage credentials, keystore or release secrets were provided.

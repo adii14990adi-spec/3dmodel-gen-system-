@@ -19,7 +19,7 @@ object GeometryInspector {
         Row("Morph targets", Formatting.number(g.morphTargetCount)),
         Row("Bounding box min", g.boundingBox?.min?.joinToString { "%.3f".format(it) } ?: "n/a"),
         Row("Bounding box max", g.boundingBox?.max?.joinToString { "%.3f".format(it) } ?: "n/a"),
-        Row("Dimensions", g.dimensions.joinToString { "%.3f".format(it) }.ifEmpty { "n/a"))
+        Row("Dimensions", g.dimensions.joinToString { "%.3f".format(it) }.ifEmpty { "n/a" }))
     )
 }
 

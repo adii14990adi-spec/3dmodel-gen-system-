@@ -29,7 +29,7 @@ This file distinguishes **implemented + executed** from **implemented but unveri
 - **Local SAF imports**: render correctly but have no pipeline metadata, so inspectors honestly show "not available for local imports — process through the pipeline".
 - **Wireframe/x-ray/normal modes**: implemented by overriding the glTF material instance base colour and by real overlay geometry; they are not a full per-triangle wireframe shader. Colours are honest visualisation modes, not fabricated geometry statistics.
 - **KTX2/Basis**: disabled unless runtime decoding is provided.
-- **Optional Filament APIs**: orthographic projection, exposure, HDR/shadow switches and MSAA are invoked reflectively; on a Filament build lacking them the feature degrades gracefully rather than breaking the APK.
+- **Filament runtime calls**: orthographic projection, exposure, HDR/post-processing, shadowing and MSAA call the pinned Filament 1.75.1 Java APIs directly inside `runCatching`, so an unsupported renderer backend degrades gracefully rather than crashing. Filament 1.76.1+ requires `compileSdk 37` and is intentionally not used with AGP 8.7.3 / `compileSdk 35`.
 - **bpy wheel in Python**: an alternative to the Blender binary, not included here; CI uses the official Blender tarball.
 
 ## Not implemented (scope decisions)

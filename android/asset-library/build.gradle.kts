@@ -30,5 +30,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines)
     implementation(libs.androidx.documentfile)
     implementation(libs.androidx.core.ktx)
+    // :data exposes Room-backed database classes; consumers need RoomDatabase on the classpath.
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
     testImplementation(libs.junit)
 }
