@@ -10,8 +10,6 @@
 | KSP | 2.0.21-1.0.25 |
 | Compose BOM | 2024.12.01 |
 | Filament / gltfio / filament-utils | 1.75.1 |
-
-> Filament 1.75.1 is the newest Maven Central release built against `compileSdk 34`, so it is the highest version compatible with this pinned AGP 8.7.3 / `compileSdk 35` matrix. Filament 1.76.1+ requires `compileSdk 37` and a correspondingly newer AGP/Gradle/SDK platform.
 | Room | 2.6.1 |
 | DataStore Preferences | 1.1.1 |
 | Retrofit | 2.11.0 · OkHttp 4.12.0 · kotlinx-serialization 1.7.3 |
@@ -19,6 +17,8 @@
 | compileSdk / targetSdk / minSdk | 35 / 35 / 26 |
 | JDK | 17 |
 | NDK / OpenGL ES | Filament AARs; OpenGL ES 3.0 required |
+
+Filament 1.75.1 is the newest Maven Central release built against `compileSdk 34`, so it is the highest version compatible with this pinned AGP 8.7.3 / `compileSdk 35` matrix. Filament 1.76.1+ requires `compileSdk 37` and a correspondingly newer AGP/Gradle/SDK platform.
 
 All versions live in `android/gradle/libs.versions.toml`; `gradle/wrapper/gradle-wrapper.jar` and `gradlew` come from the Gradle v8.9.0 source tag. Dependencies are pinned (no dynamic `+` versions).
 
@@ -62,6 +62,64 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 - Quality caps Performance to ~30 fps under thermal pressure; Balanced is the default. No geometry reduction is applied.
 - KTX2/Basis is disabled unless runtime decoding is available (`runtime.ktx2_enabled: false`).
 - Debug overlays are genuine glTF LINE/TRIANGLES primitives built by `DebugGlbBuilder` and loaded through `gltfio`, not a 2D canvas mock.
-- Optional Filament APIs (orthographic projection, exposure, HDR/shadows switches, MSAA) are invoked reflectively with graceful degradation so a version-specific API difference does not break the build.
+- Optional Filament APIs (orthographic projection, exposure, HDR/shadows switches, MSAA) are wrapped in `runCatching` so a renderer backend that rejects one call degrades gracefully instead of crashing.
 
-**Not verified here:** no JDK/Android SDK/device in the sandbox, so no APK was compiled and no device tests were run. `scripts/check_android_sources.py` validates module structure, all 12 screen destinations, version pins and absence of hardcoded secrets.
+**Not verified here:** no JDK/Android SDK/device in the sandbox, so no APK was compiled and no device tests were run. `scripts/check_android_sources.py` validates module structure, all 12 screen destinations, version pins, absence of hardcoded secrets and Kotlin lexical balance.
+
+## Step 1 build fix and foundation audit (2026-11-03)
+
+### Defect 1 — confirmed CI failure (`:inspector:compileDebugKotlin`)
+
+`android/inspector/src/main/java/com/assetstudio/inspector/Inspectors.kt` line 22 closed
+`Row("Dimensions", …)` with an extra `)`, so the list-closing `)` on line 23 was orphaned. Kotlin reported it on the
+*following* line:
+
+```
+Inspectors.kt:23:5 Syntax error: Expecting member declaration.
+```
+
+Fix: removed the surplus parenthesis (one character). `GeometryInspector.rows()` behaviour is unchanged — 14 rows,
+same labels, same values.
+
+### Defect 2 — latent compile error that the first failure masked (`:app`)
+
+`:app` never compiled in CI because it depends on `:inspector`. After rebuilding the dependency graph by inspection,
+`StudioViewModel.importLocal()` contained a shadowed implicit lambda parameter:
+
+```kotlin
+repo.importLocal(uri, name).onSuccess { _ui.update { it.copy(message = "Imported ${it.name}") } }
+```
+
+The inner `it` is a `StudioUiState` (no `name` property), so `${it.name}` is an unresolved reference. Fix: the outer
+lambda parameter is now named (`entity`) and the message uses `entity.name`. No behaviour change.
+
+### Static guard added
+
+`scripts/check_android_sources.py` now lexes every `android/**/*.kt` file and fails on unbalanced brackets, unclosed
+strings/block comments and unterminated `${…}` templates, skipping string bodies, raw strings, char literals and
+nested comments. It reproduces the original failure exactly when the extra `)` is reintroduced, so this class of
+syntax error is caught without a JDK. It runs in `validation.yml`, in the new pre-Gradle step of `android-build.yml`,
+and as a pytest case (`tests/unit/test_extras.py`).
+
+### Audit results
+
+| Area | Finding | Status |
+|---|---|---|
+| Gradle wrapper | Pinned to `gradle-8.9-bin.zip`, `distributionSha256Sum` not set, wrapper jar and `gradlew` (mode 755) tracked, wrapper-validation step in CI | OK |
+| Plugin compatibility | AGP 8.7.3 requires Gradle ≥ 8.9 and JDK 17 — both pinned; Kotlin 2.0.21 with the Compose compiler plugin 2.0.21; KSP 2.0.21-1.0.25 matches Kotlin | OK |
+| Toolchain | `compileOptions` 17 + `kotlinOptions.jvmTarget = "17"` in all eight modules; CI uses Temurin 17 | OK |
+| Module graph | `:app` → all seven modules; `:asset-library` → `:core`, `:data` (+ Room runtime, added previously because `AssetDatabase` appears in repository signatures); no cycles | OK |
+| API leaking across `implementation` | `SkeletonInspector.overlayLines(): List<DebugLine>` returns a `:renderer` type while `:skeleton` declares `:renderer` as `implementation`. It compiles only because `:app` also depends on `:renderer` directly. Latent fragility — noted, not changed in Step 1 | Documented |
+| Namespaces / IDs | Unique namespace per module; `applicationId com.assetstudio.app` with `.debug` suffix; FileProvider authority `${applicationId}.fileprovider` matches the runtime `"${ctx.packageName}.fileprovider"` | OK |
+| SDK configuration | `compileSdk`/`targetSdk` 35, `minSdk` 26, `buildConfig` + `compose` features on; CI installs `platforms;android-35` and `build-tools;35.0.0` | OK |
+| Hardcoded paths | None; `keystore.properties` is optional and git-ignored; API base URL defaults to the `example.invalid` placeholder and is user-configurable at runtime | OK |
+| Secrets | No keys, keystores or tokens in the tree; secret-pattern scan is part of the static checks; R8/`BuildConfig` carry no credentials | OK |
+| GitHub Actions | `android-build.yml`: JDK 17 + SDK 35 + wrapper validation + optional signing + artifact upload; `validation.yml` mirrors the local pipeline; `release.yml` gated on secrets | OK (added pre-Gradle static step) |
+| Unit tests in `android/` | There are **no** JVM unit test sources yet (`./gradlew test` runs an empty suite) | Gap, documented |
+
+### Unexecuted in this environment
+
+`./gradlew :inspector:compileDebugKotlin`, `./gradlew test` and `./gradlew assembleDebug` all stop before any
+compilation with `javax.net.ssl.SSLHandshakeException` → `java.io.EOFException: SSL peer shut down incorrectly` while
+the wrapper fetches `gradle-8.9-bin.zip`; `ANDROID_HOME` is empty and no Android SDK/`sdkmanager` is installed. A JDK
+was provisioned locally to reach that point. The authoritative build runs in `android-build.yml` on a hosted runner.

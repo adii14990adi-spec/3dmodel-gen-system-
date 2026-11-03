@@ -51,6 +51,34 @@ def test_publish_storage_noop_without_credentials(monkeypatch):
     assert "not configured" in proc.stdout
 
 
+def test_android_source_checks_pass():
+    proc = subprocess.run([sys.executable, "scripts/check_android_sources.py"],
+                          cwd=ROOT, capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "Kotlin files balanced" in proc.stdout
+
+
+def test_kotlin_balance_check_catches_extra_paren(tmp_path):
+    """Regression guard for the Step 1 build failure (Inspectors.kt, line 22)."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "check_android_sources", ROOT / "scripts/check_android_sources.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    broken = tmp_path / "Broken.kt"
+    broken.write_text('package x\n\nobject A {\n    fun rows() = listOf(\n'
+                      '        row("a", "b"))\n    )\n}\n')
+    assert module.kotlin_structure_issues(broken), "extra closing parenthesis must be reported"
+
+    good = tmp_path / "Good.kt"
+    good.write_text('package x\n\nobject A {\n    fun rows() = listOf(\n'
+                    '        row("a", "${if (true) "y" else "n"}")\n    )\n'
+                    '    val raw = """{ not code }"""\n}\n')
+    assert module.kotlin_structure_issues(good) == []
+
+
 def test_gltf_source_can_be_packed_to_glb(pipeline, tmp_path):
     p = tmp_path / "tri.gltf"
     (tmp_path / "tri.bin").write_bytes(b"\x00\x00\x00\x00")

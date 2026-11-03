@@ -106,7 +106,10 @@ class StudioViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun importLocal(uri: Uri, name: String) = viewModelScope.launch {
-        repo.importLocal(uri, name).onSuccess { _ui.update { it.copy(message = "Imported ${it.name}") } }
+        repo.importLocal(uri, name).onSuccess { entity ->
+            // The inner `it` is StudioUiState; the imported entity needs its own name.
+            _ui.update { it.copy(message = "Imported ${entity.name}") }
+        }
             .onFailure { e -> _ui.update { it.copy(message = "Import failed: ${e.message}") } }
     }
 
