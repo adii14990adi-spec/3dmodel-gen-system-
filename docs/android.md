@@ -9,7 +9,9 @@
 | Kotlin | 2.0.21 |
 | KSP | 2.0.21-1.0.25 |
 | Compose BOM | 2024.12.01 |
-| Filament / gltfio / filament-utils | 1.77.3 |
+| Filament / gltfio / filament-utils | 1.75.1 |
+
+> Filament 1.75.1 is the newest Maven Central release built against `compileSdk 34`, so it is the highest version compatible with this pinned AGP 8.7.3 / `compileSdk 35` matrix. Filament 1.76.1+ requires `compileSdk 37` and a correspondingly newer AGP/Gradle/SDK platform.
 | Room | 2.6.1 |
 | DataStore Preferences | 1.1.1 |
 | Retrofit | 2.11.0 · OkHttp 4.12.0 · kotlinx-serialization 1.7.3 |

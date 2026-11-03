@@ -39,7 +39,7 @@ processing/            pure-Python pipeline + headless Blender scripts
    blender/             scripts run by `blender -b -P ...` in CI
 backend/               FastAPI app, SQLite sync, storage drivers, static console
 manifests/ reports/ processed/   generated publication outputs (git-ignored)
-android/               native viewer (Gradle 8.9, AGP 8.7.3, Kotlin 2.0.21, Filament 1.77.3)
+android/               native viewer (Gradle 8.9, AGP 8.7.3, Kotlin 2.0.21, Filament 1.75.1)
 .github/workflows/     asset-processing, animation-processing, android-build, validation, release
 docs/                  technical documentation
 ```
@@ -126,7 +126,7 @@ Base path `/api/v1`. Set `ASSET_STUDIO_API_KEY` to require header `X-API-Key`; r
 
 ## 7. Android viewer
 
-Native Kotlin + Jetpack Compose, Google Filament 1.77.3 (`gltfio` loads GLB/glTF), Room (offline cache), DataStore (settings), coroutines/Flow, OkHttp/Retrofit, SAF (local import), FileProvider (share).
+Native Kotlin + Jetpack Compose, Google Filament 1.75.1 (`gltfio` loads GLB/glTF), Room (offline cache), DataStore (settings), coroutines/Flow, OkHttp/Retrofit, SAF (local import), FileProvider (share).
 
 Twelve real screens: Home, Asset Library, Model Browser, 3D Viewport, Skeleton Inspector, Animation Library, Animation Player, Material Inspector, Geometry Inspector, Validation Report, Downloads, Settings. Every control performs a real action; there are no placeholder buttons.
 
@@ -140,7 +140,7 @@ cd android
 # For a signed release, create keystore.properties from CI secrets (see docs/android.md)
 ```
 
-Exact version matrix: Gradle 8.9, AGP 8.7.3, Kotlin 2.0.21, KSP 2.0.21-1.0.25, Compose BOM 2024.12.01, Room 2.6.1, DataStore 1.1.1, Retrofit 2.11.0, OkHttp 4.12.0, Filament 1.77.3, compileSdk 35, minSdk 26, JDK 17. See `docs/android.md`.
+Exact version matrix: Gradle 8.9, AGP 8.7.3, Kotlin 2.0.21, KSP 2.0.21-1.0.25, Compose BOM 2024.12.01, Room 2.6.1, DataStore 1.1.1, Retrofit 2.11.0, OkHttp 4.12.0, Filament 1.75.1, compileSdk 35, minSdk 26, JDK 17. See `docs/android.md`.
 
 ## 8. Documentation
 
