@@ -10,7 +10,7 @@ npm ci --prefix tools/gltf-validator
 .venv/bin/python -m processing.cli process-animations --all   # 10 animations, 0 failures
 .venv/bin/python -m processing.cli build-index
 .venv/bin/python -m processing.cli validate                   # all exported GLBs: 0 errors
-.venv/bin/python -m pytest -q                                 # 109 passed
+.venv/bin/python -m pytest -q                                 # 124 passed
 .venv/bin/python scripts/check_android_sources.py             # passed
 ```
 
@@ -36,8 +36,27 @@ repository: 3 tricky file names survived `--null` → `xargs -0` byte-exact, an 
 `count=0` and skipped processing, a zero SHA and `workflow_dispatch all=true` produced `--all`, and a
 docs-only diff produced `count=0`.
 
-Results: `109 passed` (`pytest -q`), `scripts/check_android_sources.py` passed, pipeline regenerated
+Results: `124 passed` (`pytest -q`), `scripts/check_android_sources.py` passed, pipeline regenerated
 8 model manifests (6 PASS / 2 ERROR) and 10 animation manifests (9 runtime GLBs, 1 incompatible quadruped).
+
+### Workflow wiring tests (`tests/unit/test_workflows.py`, 15 tests)
+
+These load the real `asset-processing.yml` / `animation-processing.yml`, render the `${{ … }}` expressions for
+a given event and execute the resolve/process shell locally:
+
+* every `steps.<id>.<output>` reference must resolve to a declared step `id` (an undefined id makes the
+  expression null, and `null != '0'` is false — processing is then silently skipped);
+* `workflow_dispatch all=true` writes exactly `b"--all\x00"` and `count=1`;
+* an empty diff writes an empty list and `count=0`;
+* a zero SHA requests `--all`;
+* the step aborts when the list cannot be written (`set -euo pipefail`), so a broken resolve never looks like
+  an empty change set;
+* the process step consumes the list with `xargs -0 -r`, and spaces/quotes/unicode survive that exact call;
+* dispatch inputs (`all`, `paths`) exist and checkout uses `fetch-depth: 0`.
+
+**Regression this caught:** the Step 02 edit to the resolve step dropped `id: changes`. The workflow still ran
+and reported success, but `steps.changes.outputs.count` evaluated to null, so `Process models` was skipped on a
+real `workflow_dispatch all=true` run. Fixed and now covered by `test_every_referenced_step_id_is_defined`.
 
 #### Verified defects fixed in Step 02
 

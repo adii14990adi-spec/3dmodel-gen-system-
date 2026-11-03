@@ -51,6 +51,7 @@ jobs:
       - name: Ensure model manifests exist
         run: python scripts/run_pipeline.py process-models --all
       - name: Resolve changed animation sources
+        id: changes
         shell: bash
         run: |
           set -euo pipefail

@@ -13,7 +13,7 @@ Kotlin/Compose/**Google Filament** viewer for Android.
 
 > **Honest status.** The Python pipeline, Khronos validation, FastAPI/SQLite metadata API, signed downloads,
 > operations console, native Android source tree and automated tests are **implemented and executed in this
-> workspace** — re-verified on 2026-11-03 (109 tests green, 8 models and 10 animations processed, 16 exported GLBs at
+> workspace** — re-verified on 2026-11-03 (124 tests green, 8 models and 10 animations processed, 16 exported GLBs at
 > 0 Khronos errors). **A compiled APK, physical-device tests and live S3/CI runs are not available here**, because this
 > sandbox has no JDK, Android SDK or device and no cloud credentials. Every unexecuted item and its exact remaining
 > setup steps are listed in [`docs/limitations.md`](docs/limitations.md). Nothing below is marked "done" unless its
@@ -264,7 +264,7 @@ ASSET_STUDIO_API_KEY=change-me .venv/bin/uvicorn backend.app:app --host 0.0.0.0 
 #    http://localhost:8000/api/v1/health
 
 # 5. Tests
-.venv/bin/python -m pytest -q                                 # 109 passed
+.venv/bin/python -m pytest -q                                 # 124 passed
 .venv/bin/python scripts/check_android_sources.py             # no JDK required
 ```
 
@@ -381,7 +381,7 @@ Each milestone must pass its acceptance tests before the next is considered comp
 - **CI rules** — tests run automatically, failures stay visible, checks are never disabled to force a green build,
   releases require verified signing configuration.
 
-Last local run (2026-11-03): `109 passed`, 8 model manifests (6 PASS / 2 ERROR), 10 animation manifests (9 runtime
+Last local run (2026-11-03): `124 passed`, 8 model manifests (6 PASS / 2 ERROR), 10 animation manifests (9 runtime
 GLBs, 1 deliberate incompatible quadruped), 16 valid GLBs at Khronos `E0 W0`.
 
 ---

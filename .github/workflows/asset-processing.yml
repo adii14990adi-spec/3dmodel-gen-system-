@@ -57,6 +57,7 @@ jobs:
           /opt/blender/blender --version
 
       - name: Resolve changed model sources
+        id: changes
         shell: bash
         run: |
           set -euo pipefail
