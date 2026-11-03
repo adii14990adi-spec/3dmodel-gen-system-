@@ -14,7 +14,7 @@ on:
         type: boolean
         default: false
       paths:
-        description: 'Space-separated source paths (optional)'
+        description: 'Source paths, one per line (optional; validated by scripts/dispatch_paths.py)'
         type: string
         default: ''
 
@@ -59,19 +59,30 @@ jobs:
       - name: Resolve changed model sources
         id: changes
         shell: bash
+        env:
+          # Untrusted dispatch input travels through the environment: it is
+          # never interpolated into shell code and never word-split by bash.
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_ALL: ${{ inputs.all }}
+          INPUT_PATHS: ${{ inputs.paths }}
+          BASE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           # NUL-separated tokens keep paths with spaces, quotes or unicode intact
           # and avoid interpolating file names into shell code.
           LIST="${RUNNER_TEMP:-/tmp}/model-changes.bin"
           : > "$LIST"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.all }}" = "true" ]; then
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$INPUT_ALL" = "true" ]; then
             printf -- '--all\0' > "$LIST"
-          elif [ -n "${{ inputs.paths }}" ]; then
-            # shellcheck disable=SC2086 - the input is an intentionally space-separated list
-            for p in ${{ inputs.paths }}; do printf '%s\0' "$p"; done > "$LIST"
+          elif [ -n "$INPUT_PATHS" ]; then
+            # The input is data, not code: write it byte-for-byte to a file and
+            # let the parser validate format, prefix, extension and containment.
+            PATHS_FILE="${RUNNER_TEMP:-/tmp}/model-changes.bin.input"
+            printf '%s' "$INPUT_PATHS" > "$PATHS_FILE"
+            python scripts/dispatch_paths.py --kind model --paths-file "$PATHS_FILE" --null > "$LIST"
           else
-            python scripts/changed_files.py --base "${{ github.event.before }}" --head "${{ github.sha }}" --kind model --null > "$LIST"
+            python scripts/changed_files.py --base "$BASE_SHA" --head "$HEAD_SHA" --kind model --null > "$LIST"
           fi
           count=$(tr -cd '\0' < "$LIST" | wc -c | tr -d ' ')
           echo "count=$count" >> "$GITHUB_OUTPUT"
@@ -80,7 +91,9 @@ jobs:
 
       - name: Process models
         if: steps.changes.outputs.count != '0'
-        run: xargs -0 -r python scripts/run_pipeline.py process-models < "${{ steps.changes.outputs.list }}"
+        env:
+          CHANGE_LIST: ${{ steps.changes.outputs.list }}
+        run: xargs -0 -r python scripts/run_pipeline.py process-models < "$CHANGE_LIST"
 
       - name: Build index and sync metadata
         run: python scripts/run_pipeline.py build-index
@@ -101,13 +114,17 @@ jobs:
           ASSET_STUDIO_S3_ENDPOINT: ${{ secrets.ASSET_STUDIO_S3_ENDPOINT }}
           ASSET_STUDIO_S3_ACCESS_KEY: ${{ secrets.ASSET_STUDIO_S3_ACCESS_KEY }}
           ASSET_STUDIO_S3_SECRET_KEY: ${{ secrets.ASSET_STUDIO_S3_SECRET_KEY }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           # Atomic publication: upload to a staging prefix, then copy into place.
-          python scripts/publish_storage.py --prefix "staging/${{ github.run_id }}" --then-promote
+          python scripts/publish_storage.py --prefix "staging/$RUN_ID" --then-promote
 
       - name: Summary
         if: always()
+        env:
+          CHANGE_COUNT: ${{ steps.changes.outputs.count }}
+          CHANGE_LIST: ${{ steps.changes.outputs.list }}
         run: |
           echo "### Model processing" >> "$GITHUB_STEP_SUMMARY"
-          echo "Changed source tokens: ${{ steps.changes.outputs.count }} (list: ${{ steps.changes.outputs.list }})" >> "$GITHUB_STEP_SUMMARY"
+          echo "Changed source tokens: $CHANGE_COUNT (list: $CHANGE_LIST)" >> "$GITHUB_STEP_SUMMARY"
           echo "Reports and manifests are attached as CI artifacts." >> "$GITHUB_STEP_SUMMARY"

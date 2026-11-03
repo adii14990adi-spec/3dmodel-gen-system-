@@ -14,8 +14,25 @@
 
 The workflow writes NUL-separated tokens to `$RUNNER_TEMP` and runs `xargs -0 -r python scripts/run_pipeline.py process-…`, so paths with spaces, quotes or unicode stay intact and are never interpolated into shell code. When the diff cannot be trusted (zero/absent `before` SHA on a new branch, force push, shallow history, unknown or option-like ref) the script prints `--all` and the job processes everything instead of silently skipping assets. The resolve step uses `set -euo pipefail`, so a genuine resolution failure fails the workflow.
 
-`workflow_dispatch` accepts `all=true` for a full reprocess or a space-separated `paths` list (`all=true` is required for file names containing spaces, because that input is whitespace-split). Both processing workflows use `concurrency` groups so
-overlapping runs do not publish conflicting manifests.
+`workflow_dispatch` accepts `all=true` for a full reprocess, or a `paths` list with **one source path per line** (so file names containing spaces work). Both processing workflows use `concurrency` groups so overlapping runs do not publish conflicting manifests.
+
+### Dispatch input is data, never shell
+
+`inputs.paths` is attacker-controlled. Neither workflow interpolates it into a `run:` block: the expression is declared under `env:` as `INPUT_PATHS`, the shell writes that variable byte-for-byte into `$RUNNER_TEMP/*.input`, and `scripts/dispatch_paths.py` parses the file. There is no `eval`, no `bash -c`, no generated command line and no word-splitting, so `$(…)`, backticks, `;`, quotes and newlines stay text, and `my prop.glb` stays one path.
+
+`scripts/dispatch_paths.py --kind model|animation --paths-file <file> --null` accepts only what the pipeline can actually process:
+
+| Rule | Rejected example |
+|---|---|
+| one repo-relative POSIX path per line, UTF-8, no blank lines | `assets/models/a.glb\n\n`, `\r\n` line endings |
+| no absolute, drive-letter or UNC paths | `/etc/passwd`, `C:/Windows/…`, `\\server\share\x.glb` |
+| no backslashes (canonical form only, nothing is silently rewritten) | `assets\models\..\..\etc\passwd` |
+| no `.`, `..` or empty segments, no `./` prefix or `//` | `assets/models/../../etc/passwd`, `./assets/models/a.glb` |
+| must live under the kind's asset root | `assets/animation/…` in a model job |
+| extension must be in the pipeline allowlist (case-insensitive) | `x.py`, `x.sh`, `x.exe`, `x.blend`, no extension |
+| must resolve (symlinks followed) to an existing regular file **inside** that root | `assets/models/evil.glb -> /etc/passwd` |
+
+Every rejection exits with status 2, prints a `::error::` annotation and writes **no** tokens, so a partly valid request is never half-processed. `set -euo pipefail` turns that into a failed job.
 
 ## Runners are temporary
 

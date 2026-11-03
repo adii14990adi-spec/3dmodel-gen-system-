@@ -10,7 +10,7 @@ npm ci --prefix tools/gltf-validator
 .venv/bin/python -m processing.cli process-animations --all   # 10 animations, 0 failures
 .venv/bin/python -m processing.cli build-index
 .venv/bin/python -m processing.cli validate                   # all exported GLBs: 0 errors
-.venv/bin/python -m pytest -q                                 # 124 passed
+.venv/bin/python -m pytest -q                                 # 202 passed
 .venv/bin/python scripts/check_android_sources.py             # passed
 ```
 
@@ -36,10 +36,10 @@ repository: 3 tricky file names survived `--null` → `xargs -0` byte-exact, an 
 `count=0` and skipped processing, a zero SHA and `workflow_dispatch all=true` produced `--all`, and a
 docs-only diff produced `count=0`.
 
-Results: `124 passed` (`pytest -q`), `scripts/check_android_sources.py` passed, pipeline regenerated
+Results: `202 passed` (`pytest -q`), `scripts/check_android_sources.py` passed, pipeline regenerated
 8 model manifests (6 PASS / 2 ERROR) and 10 animation manifests (9 runtime GLBs, 1 incompatible quadruped).
 
-### Workflow wiring tests (`tests/unit/test_workflows.py`, 15 tests)
+### Workflow wiring tests (`tests/unit/test_workflows.py`, 39 tests)
 
 These load the real `asset-processing.yml` / `animation-processing.yml`, render the `${{ … }}` expressions for
 a given event and execute the resolve/process shell locally:
@@ -57,6 +57,39 @@ a given event and execute the resolve/process shell locally:
 **Regression this caught:** the Step 02 edit to the resolve step dropped `id: changes`. The workflow still ran
 and reported success, but `steps.changes.outputs.count` evaluated to null, so `Process models` was skipped on a
 real `workflow_dispatch all=true` run. Fixed and now covered by `test_every_referenced_step_id_is_defined`.
+
+## Security fix — dispatch path input (executed 2026-11-03)
+
+`workflow_dispatch` `inputs.paths` was interpolated straight into the resolve step's shell script
+(`for p in ${{ inputs.paths }}; do …`), i.e. a dispatch input could execute commands on the runner. It is now
+delivered through `env: INPUT_PATHS`, written to a file, and validated by `scripts/dispatch_paths.py`.
+
+`tests/unit/test_dispatch_paths.py` (54 tests, real directories and real files, nothing mocked):
+
+| Case | Assertion |
+|---|---|
+| normal relative path | accepted, one token |
+| spaces / unicode / quotes / `$` | accepted as a single path, byte-exact in the NUL list |
+| `;`, `$()`, backticks, newline-separated payloads | exit 2, empty stdout, marker file proving execution **not** created, directory tree unchanged |
+| absolute path, `~/`, drive letter, UNC | rejected |
+| `../` traversal, Windows `..\..` traversal, backslash separators | rejected (no silent rewriting) |
+| other asset root, repository file, wrong kind | rejected |
+| `.py`, `.sh`, `.blend`, `.zip`, `.txt`, no extension, `x.glb.exe` | rejected; the allowlist is asserted against `SUPPORTED_MODELS` / `SUPPORTED_ANIMATIONS` |
+| symlink to a file outside the root, symlink to an outside directory, dangling symlink | rejected; a symlink staying inside the root is allowed |
+| empty, whitespace-only, blank line, embedded NUL, CRLF, ANSI escape, invalid UTF-8 | rejected, exit 2 |
+| duplicate entries | emitted once |
+| CLI contract | `::error::` on stderr, non-zero exit, **no partial token list** on failure |
+
+`tests/unit/test_workflows.py` additionally asserts, against the real YAML: no `run:` block in **any** of the
+five workflows contains a `${{ … }}` expression, `INPUT_PATHS` is declared under `env:`, the resolve step calls
+`scripts/dispatch_paths.py --kind <kind> --paths-file "$PATHS_FILE" --null`, and there is no `for p in` loop.
+Hostile payloads are run through the real resolve shell (not a paraphrase of it): each fails the step, creates no
+marker file and leaves an empty token list. Valid dispatch paths, multiple paths, `all=true`, empty diffs,
+zero SHAs, push detection with spaces/unicode, and deletion-only pushes are executed through that same shell.
+
+Results: `202 passed` (`pytest`, exit 0), `scripts/check_android_sources.py` passed, pipeline regenerated
+8 model manifests (6 PASS / 2 ERROR) and 10 animation manifests (9 PASS / 1 WARNING), every exported GLB at
+0 Khronos errors, and `assets/` byte-identical before/after (SHA-256 of all 19 files).
 
 #### Verified defects fixed in Step 02
 

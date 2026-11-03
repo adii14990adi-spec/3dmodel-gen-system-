@@ -35,8 +35,12 @@ Paths are filtered by kind (`assets/models/` vs `assets/animation/`) **and** by 
 `--null` emits NUL-separated tokens; the workflows pipe that into `xargs -0`, so names with spaces,
 quotes or `$` survive without ever being interpolated into shell code.
 
-`workflow_dispatch` also accepts `all=true` (full reprocess) or a space-separated `paths` list — that
-input is split on whitespace, so file names containing spaces must use `all=true` or a push trigger.
+`workflow_dispatch` also accepts `all=true` (full reprocess) or a `paths` list holding one source path per
+line. That input is untrusted: it arrives as the `INPUT_PATHS` environment variable, is written verbatim to a
+file, and is validated by `scripts/dispatch_paths.py` before the pipeline sees it. Entries must be
+repo-relative POSIX paths inside the kind's asset root, without `.`/`..`/empty segments, backslashes or
+control characters, with a supported extension, resolving (through symlinks) to an existing regular file in
+that root. Anything else fails the job with an `::error::` annotation and emits no tokens at all.
 
 ### Stable asset identity (`processing.common.asset_id`)
 
