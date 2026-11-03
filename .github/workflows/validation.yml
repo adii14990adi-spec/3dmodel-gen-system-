@@ -1,0 +1,50 @@
+name: Validation
+
+on:
+  push:
+    paths-ignore:
+      - 'assets/**/*.glb'
+      - 'assets/**/*.bvh'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11', cache: 'pip' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Install pinned dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          npm ci --prefix tools/gltf-validator || npm install --prefix tools/gltf-validator
+      - name: Python syntax check
+        run: python -m compileall -q processing backend scripts
+      - name: Generate verification dataset
+        run: python scripts/generate_sample_assets.py
+      - name: Run model and animation pipelines
+        run: |
+          python -m processing.cli process-models --all
+          python -m processing.cli process-animations --all
+          python -m processing.cli build-index
+      - name: Official Khronos glTF Validator
+        run: python -m processing.cli validate
+      - name: Python test suite
+        run: pytest -q
+      - name: Android source structure checks
+        run: python scripts/check_android_sources.py
+      - name: Upload validation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-reports-${{ github.run_id }}
+          path: reports/
+          retention-days: 14

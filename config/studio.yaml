@@ -1,0 +1,49 @@
+studio:
+  name: "3D Asset Studio"
+  version: "1.0.0"
+  processing_version: "1.0.0"
+
+paths:
+  assets: "assets"
+  sample_assets: "sample-assets"
+  processed: "processed"
+  manifests: "manifests"
+  reports: "reports"
+  database: "local/asset_studio.db"
+  validator: "tools/gltf-validator/validate.js"
+
+limits:
+  max_source_bytes: 524288000       # 500 MiB
+  max_vertex_count: 8000000
+  max_texture_bytes: 134217728      # 128 MiB
+  processing_timeout_seconds: 900
+  max_animation_frames: 20000
+
+runtime:
+  primary_format: "GLB"
+  secondary_format: "GLTF"
+  filament_version: "1.80.0"
+  ktx2_enabled: false               # only if runtime decoding is available
+
+compatibility:
+  humanoid_min_role_coverage: 0.75
+  humanoid_min_mapped_bones: 12
+  require_unambiguous_roles: true
+  manual_map_required_for_ambiguous: true
+
+backend:
+  api_prefix: "/api/v1"
+  storage_driver: "local"           # local | s3
+  signed_url_ttl_seconds: 900
+  rate_limit_per_minute: 120
+  api_key_env: "ASSET_STUDIO_API_KEY"
+
+android:
+  gradle: "8.9"
+  agp: "8.7.3"
+  kotlin: "2.0.21"
+  compose_bom: "2024.12.01"
+  compile_sdk: 35
+  min_sdk: 26
+  jdk: 17
+  filament: "1.80.0"

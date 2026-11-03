@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">3D Asset Studio</string>
+    <string name="no_animation_clips">No animation clips available</string>
+    <string name="large_file_warning">This asset is large. Download may use significant storage and memory.</string>
+</resources>

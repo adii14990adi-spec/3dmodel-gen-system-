@@ -1,0 +1,10 @@
+{
+  "name": "asset-studio-gltf-validator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pinned official Khronos glTF Validator wrapper",
+  "license": "MIT",
+  "dependencies": {
+    "gltf-validator": "2.0.0-dev.3.10"
+  }
+}

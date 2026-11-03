@@ -1,0 +1,187 @@
+{
+  "version": "1.0.0",
+  "description": "Canonical humanoid roles. Names alone are NOT proof of compatibility; hierarchy and spatial checks are applied in addition.",
+  "roles": {
+    "hips": [
+      "hip",
+      "hips",
+      "root",
+      "bip01",
+      "pelvis",
+      "bip01_pelvis",
+      "mixamoro:hips",
+      "mixamorig:hips"
+    ],
+    "spine": [
+      "spine",
+      "spine0",
+      "spine_0",
+      "lowerback",
+      "bip01_spine",
+      "mixamorig:spine"
+    ],
+    "chest": [
+      "chest",
+      "spine1",
+      "spine2",
+      "spine01",
+      "spine02",
+      "spine_01",
+      "upperback",
+      "upper_spine",
+      "bip01_spine1",
+      "mixamorig:spine1",
+      "mixamorig:spine2"
+    ],
+    "neck": [
+      "neck",
+      "bip01_neck",
+      "mixamorig:neck"
+    ],
+    "head": [
+      "head",
+      "bip01_head",
+      "mixamorig:head"
+    ],
+    "left_shoulder": [
+      "clavicle_l",
+      "l_shoulder",
+      "leftshoulder",
+      "left_shoulder",
+      "mixamorig:leftshoulder"
+    ],
+    "left_upper_arm": [
+      "leftarm",
+      "left_arm",
+      "l_upperarm",
+      "upperarm_l",
+      "mixamorig:leftarm"
+    ],
+    "left_lower_arm": [
+      "forearm_l",
+      "l_forearm",
+      "leftforearm",
+      "left_forearm",
+      "mixamorig:leftforearm"
+    ],
+    "left_hand": [
+      "hand_l",
+      "l_hand",
+      "lefthand",
+      "left_hand",
+      "mixamorig:lefthand"
+    ],
+    "right_shoulder": [
+      "clavicle_r",
+      "r_shoulder",
+      "rightshoulder",
+      "right_shoulder",
+      "mixamorig:rightshoulder"
+    ],
+    "right_upper_arm": [
+      "rightarm",
+      "right_arm",
+      "r_upperarm",
+      "upperarm_r",
+      "mixamorig:rightarm"
+    ],
+    "right_lower_arm": [
+      "forearm_r",
+      "r_forearm",
+      "rightforearm",
+      "right_forearm",
+      "mixamorig:rightforearm"
+    ],
+    "right_hand": [
+      "hand_r",
+      "r_hand",
+      "righthand",
+      "right_hand",
+      "mixamorig:righthand"
+    ],
+    "left_upper_leg": [
+      "l_thigh",
+      "thigh_l",
+      "leftupleg",
+      "left_upleg",
+      "mixamorig:leftupleg"
+    ],
+    "left_lower_leg": [
+      "calf_l",
+      "l_calf",
+      "leftleg",
+      "left_leg",
+      "mixamorig:leftleg"
+    ],
+    "left_foot": [
+      "foot_l",
+      "l_foot",
+      "leftfoot",
+      "left_foot",
+      "mixamorig:leftfoot"
+    ],
+    "left_toe": [
+      "l_toe",
+      "toe_l",
+      "lefttoe",
+      "left_toe",
+      "mixamorig:lefttoe"
+    ],
+    "right_upper_leg": [
+      "r_thigh",
+      "thigh_r",
+      "rightupleg",
+      "right_upleg",
+      "mixamorig:rightupleg"
+    ],
+    "right_lower_leg": [
+      "calf_r",
+      "r_calf",
+      "rightleg",
+      "right_leg",
+      "mixamorig:rightleg"
+    ],
+    "right_foot": [
+      "foot_r",
+      "r_foot",
+      "rightfoot",
+      "right_foot",
+      "mixamorig:rightfoot"
+    ],
+    "right_toe": [
+      "r_toe",
+      "toe_r",
+      "righttoe",
+      "right_toe",
+      "mixamorig:righttoe"
+    ]
+  },
+  "required_roles": [
+    "hips",
+    "spine",
+    "chest",
+    "head",
+    "left_upper_arm",
+    "right_upper_arm",
+    "left_upper_leg",
+    "right_upper_leg"
+  ],
+  "side_tokens": {
+    "left": [
+      "left",
+      "l_",
+      "_l",
+      ".l",
+      "mixamorig:left",
+      "bip01_l"
+    ],
+    "right": [
+      "right",
+      "r_",
+      "_r",
+      ".r",
+      "mixamorig:right",
+      "bip01_r"
+    ]
+  }
+}
