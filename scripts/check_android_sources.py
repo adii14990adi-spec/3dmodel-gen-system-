@@ -2,8 +2,14 @@
 """Static CI checks for the Android source tree (no JDK required here).
 
 Verifies the modular structure, all 12 real screen destinations, no hardcoded
-secrets and the exact pinned version matrix. This is NOT a substitute for a
-Gradle build — android-build.yml performs that on a runner with the Android SDK.
+secrets, the exact pinned version matrix, and that every Kotlin file is
+lexically balanced (brackets, strings, comments). The balance check catches the
+class of error that failed the Step 1 build — e.g. an extra closing parenthesis
+in a listOf() call, which the Kotlin compiler reports as
+"Syntax error: Expecting member declaration" on the following line.
+
+This is NOT a substitute for a Gradle build — android-build.yml performs that on
+a runner with the Android SDK.
 """
 from __future__ import annotations
 
@@ -20,6 +26,115 @@ SCREENS = ["HomeScreen", "AssetLibraryScreen", "ModelBrowserScreen", "ViewportSc
 MODULES = ["app", "core", "data", "asset-library", "renderer", "skeleton", "animation", "inspector"]
 SECRET_PATTERNS = [r"AKIA[0-9A-Z]{16}", r"ghp_[A-Za-z0-9]{20,}",
                    r"-----BEGIN (RSA |EC )?PRIVATE KEY-----"]
+OPENERS = {"(": ")", "[": "]", "{": "}"}
+CLOSERS = {")": "(", "]": "[", "}": "{"}
+
+
+def kotlin_structure_issues(path: Path) -> list[str]:
+    """Lexically balance brackets in a Kotlin file.
+
+    Strings (including ``${...}`` templates), raw strings, char literals and
+    comments are skipped so that braces inside them never count. Nested block
+    comments (Kotlin allows them) and nested string templates are handled.
+    """
+    text = path.read_text(encoding="utf-8")
+    issues: list[str] = []
+    # Entries are ("code", opener, line) for brackets or ("template", "", line)
+    # for the ${ ... } code region inside a string.
+    stack: list[tuple[str, str, int]] = []
+    mode = "code"          # code | str | raw
+    line = 1
+    i, n = 0, len(text)
+
+    while i < n:
+        ch = text[i]
+        if mode == "code":
+            if ch == "\n":
+                line += 1
+                i += 1
+            elif text.startswith("//", i):
+                j = text.find("\n", i)
+                i = n if j < 0 else j
+            elif text.startswith("/*", i):
+                depth, start_line, i = 1, line, i + 2
+                while i < n and depth:
+                    if text.startswith("/*", i):
+                        depth += 1
+                        i += 2
+                    elif text.startswith("*/", i):
+                        depth -= 1
+                        i += 2
+                    else:
+                        if text[i] == "\n":
+                            line += 1
+                        i += 1
+                if depth:
+                    issues.append(f"line {start_line}: unterminated block comment")
+            elif text.startswith('"""', i):
+                mode, i = "raw", i + 3
+            elif ch == '"':
+                mode, i = "str", i + 1
+            elif ch == "'":
+                j, closed = i + 1, False
+                while j < n and j - i <= 6:
+                    if text[j] == "\\":
+                        j += 2
+                        continue
+                    if text[j] == "'":
+                        closed, j = True, j + 1
+                        break
+                    if text[j] == "\n":
+                        break
+                    j += 1
+                i = j if closed else i + 1
+            else:
+                if ch in OPENERS:
+                    stack.append(("code", ch, line))
+                elif ch in CLOSERS:
+                    if not stack:
+                        issues.append(f"line {line}: unmatched closing '{ch}'")
+                    else:
+                        kind, opener, opened_line = stack.pop()
+                        if kind == "template":
+                            # '}' closes a ${ ... } template -> back into the string
+                            mode = "str"
+                        elif CLOSERS[ch] != opener:
+                            issues.append(
+                                f"line {line}: '{ch}' closes '{opener}' opened on line {opened_line}")
+                i += 1
+        elif mode == "str":
+            if ch == "\\":
+                i += 2
+            elif text.startswith("${", i):
+                stack.append(("template", "${", line))
+                mode, i = "code", i + 2
+            elif ch == '"':
+                mode, i = "code", i + 1
+            elif ch == "\n":
+                issues.append(f"line {line}: newline inside a string literal")
+                mode, i = "code", i + 1
+                line += 1
+            else:
+                i += 1
+        else:  # raw string
+            if text.startswith('"""', i):
+                mode, i = "code", i + 3
+            elif text.startswith("${", i):
+                stack.append(("template", "${", line))
+                mode, i = "code", i + 2
+            else:
+                if ch == "\n":
+                    line += 1
+                i += 1
+
+    if mode != "code":
+        issues.append(f"line {line}: unterminated {mode} string")
+    for kind, opener, opened_line in stack:
+        if kind == "template":
+            issues.append(f"line {opened_line}: unclosed '${{' template")
+        else:
+            issues.append(f"line {opened_line}: unclosed '{opener}'")
+    return issues
 
 
 def main() -> int:
@@ -49,12 +164,17 @@ def main() -> int:
         failures.append("Gradle wrapper is not pinned to 8.9")
     if not (ANDROID / "gradle/wrapper/gradle-wrapper.jar").is_file():
         failures.append("gradle-wrapper.jar missing")
+    kotlin_files = sorted(ANDROID.rglob("*.kt"))
+    for path in kotlin_files:
+        for issue in kotlin_structure_issues(path):
+            failures.append(f"{path.relative_to(ROOT)}: {issue}")
     for f in failures:
         print("FAIL:", f)
     if failures:
         print(f"{len(failures)} Android source check(s) failed")
         return 1
-    print(f"Android source checks passed: {len(MODULES)} modules, {len(SCREENS)} screens, version matrix pinned")
+    print(f"Android source checks passed: {len(MODULES)} modules, {len(SCREENS)} screens, "
+          f"version matrix pinned, {len(kotlin_files)} Kotlin files balanced")
     return 0
 
 

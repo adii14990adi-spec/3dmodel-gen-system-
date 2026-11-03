@@ -34,6 +34,8 @@ jobs:
           packages: 'platforms;android-35 build-tools;35.0.0 platform-tools'
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v3
+      - name: Static Android source checks (no JDK needed)
+        run: python3 scripts/check_android_sources.py
       - name: Configure release signing (only when secrets are present)
         if: ${{ inputs.release }}
         env:
