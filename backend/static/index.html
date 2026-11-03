@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>3D Asset Studio — Operations Console</title>
+<style>
+:root { color-scheme: dark; --bg:#0e1117; --panel:#161b24; --line:#252d3a; --accent:#5eead4; --muted:#9aa7b8; --warn:#f5c451; --err:#f87171; --ok:#4ade80; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:#e6edf6; font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif; }
+header { padding:18px 24px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+header h1 { font-size:18px; margin:0; letter-spacing:.3px; }
+header .tag { color:var(--muted); font-size:12px; border:1px solid var(--line); padding:3px 8px; border-radius:6px; }
+nav { display:flex; gap:4px; padding:10px 24px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+nav button { background:transparent; color:var(--muted); border:1px solid transparent; padding:7px 13px; border-radius:7px; cursor:pointer; font:inherit; }
+nav button.active { color:var(--accent); border-color:var(--line); background:var(--panel); }
+main { padding:22px 24px 60px; max-width:1400px; margin:0 auto; }
+.cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:20px; }
+.card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; }
+.card .k { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.6px; }
+.card .v { font-size:26px; margin-top:6px; font-variant-numeric:tabular-nums; }
+table { width:100%; border-collapse:collapse; background:var(--panel); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+th,td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top; font-size:13px; }
+th { color:var(--muted); font-weight:600; background:#121821; }
+tr:last-child td { border-bottom:0; }
+code { color:var(--accent); font-size:12px; }
+.badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:11px; border:1px solid var(--line); }
+.pass { color:var(--ok); } .warn { color:var(--warn); } .err { color:var(--err); }
+input { background:#0d121a; border:1px solid var(--line); color:#e6edf6; border-radius:7px; padding:8px 10px; font:inherit; width:260px; }
+.toolbar { display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; align-items:center; }
+pre { background:#0d121a; border:1px solid var(--line); border-radius:8px; padding:14px; overflow:auto; max-height:520px; font-size:12px; }
+.note { color:var(--muted); font-size:12px; margin:10px 0 18px; }
+a { color:var(--accent); }
+.error { background:#2a1418; border:1px solid #5a2630; color:#ffb4b4; padding:12px; border-radius:8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>3D Asset Studio</h1>
+  <span class="tag">Operations console · read-only metadata</span>
+  <span class="tag" id="env">loading…</span>
+</header>
+<nav id="tabs"></nav>
+<main>
+  <div id="error"></div>
+  <div id="content"></div>
+</main>
+<script>
+const API = '/api/v1';
+const tabs = ['Overview','Models','Animations','Compatibility','Reports','Jobs','API'];
+let active = 'Overview';
+let cache = {};
+
+async function get(path) {
+  const r = await fetch(API + path);
+  if (!r.ok) throw new Error(path + ' → HTTP ' + r.status + ' ' + (await r.text()).slice(0,200));
+  return r.json();
+}
+function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function statusBadge(s) { const c = s === 'PASS' ? 'pass' : (s === 'ERROR' ? 'err' : 'warn'); return `<span class="badge ${c}">${esc(s)}</span>`; }
+function table(headers, rows) {
+  if (!rows.length) return '<p class="note">No records published yet.</p>';
+  return '<table><thead><tr>' + headers.map(h => `<th>${esc(h)}</th>`).join('') + '</tr></thead><tbody>' +
+    rows.map(r => '<tr>' + r.map(c => `<td>${c}</td>`).join('') + '</tr>').join('') + '</tbody></table>';
+}
+async function render() {
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.textContent === active));
+  const el = document.getElementById('content');
+  try {
+    if (active === 'Overview') {
+      const [h, assets, rel] = await Promise.all([get('/health'), get('/assets'), get('/releases/latest')]);
+      document.getElementById('env').textContent = `${h.storage_driver} storage · ${h.validator} validator · v${h.version}`;
+      el.innerHTML = `<div class="cards">
+        <div class="card"><div class="k">Models</div><div class="v">${h.assets.models}</div></div>
+        <div class="card"><div class="k">Animations</div><div class="v">${h.assets.animations}</div></div>
+        <div class="card"><div class="k">Passing assets</div><div class="v">${assets.filter(a=>a.validation_status==='PASS').length}</div></div>
+        <div class="card"><div class="k">Playable exports</div><div class="v">${assets.filter(a=>a.kind==='animation'&&a.processed_path&&a.validation_status!=='ERROR').length}</div></div>
+        </div>
+        <p class="note">All figures are read from published manifests. This console is an operations view, not the 3D renderer — the native Android application renders GLB/glTF with Filament.</p>
+        <h3>Latest release</h3><pre>${esc(JSON.stringify(rel,null,2))}</pre>`;
+    } else if (active === 'Models' || active === 'Animations') {
+      const kind = active === 'Models' ? 'model' : 'animation';
+      const data = await get('/assets?kind=' + kind + '&limit=500');
+      el.innerHTML = `<div class="toolbar"><input id="q" placeholder="Filter by name or id…" oninput="filterTable()" /><span class="note">${data.length} published ${kind}(s)</span></div>` +
+        table(['Asset ID','Name','Category','Source','Size','Validation','Retarget','Download'],
+          data.map(a => [`<code>${esc(a.id)}</code>`, esc(a.name), esc(a.category), esc(a.source_format),
+            (a.processed_bytes/1024).toFixed(1)+' KiB', statusBadge(a.validation_status),
+            esc(a.retarget_status||'—'), a.processed_path ? `<a href="${API}/assets/${esc(a.id)}/download">GLB</a>` : '—']));
+    } else if (active === 'Compatibility') {
+      const models = await get('/assets?kind=model&limit=500');
+      const rows = [];
+      for (const m of models) {
+        const c = await get('/models/' + encodeURIComponent(m.id) + '/compatible-animations');
+        for (const a of c.animations) rows.push([`<code>${esc(m.id)}</code>`, esc(a.name),
+          a.compatible ? '<span class="pass">compatible</span>' : '<span class="warn">incompatible</span>',
+          a.playable ? '<span class="pass">playable</span>' : '<span class="warn">not playable</span>',
+          esc(a.retarget_status||'—'), esc(a.reason||'—')]);
+      }
+      el.innerHTML = `<p class="note">"Compatible" means the skeleton checks passed. "Playable" additionally requires a validated, exported runtime GLB for that exact target character.</p>` +
+        table(['Model','Animation','Compatible','Playable','Retarget','Reason'], rows);
+    } else if (active === 'Reports') {
+      const assets = await get('/assets?limit=500');
+      const rows = [];
+      for (const a of assets) {
+        try {
+          const r = await get('/reports/' + (a.kind==='model'?'models':'animations') + '/' + encodeURIComponent(a.id));
+          rows.push([`<code>${esc(a.id)}</code>`, statusBadge(r.status), r.summary.PASS, r.summary.WARNING, r.summary.ERROR,
+            (r.checks.filter(c=>c.severity!=='PASS').slice(0,3).map(c=>`<code>${esc(c.code)}</code> ${esc(c.description)}`).join('<br/>')||'—')]);
+        } catch(e) { rows.push([`<code>${esc(a.id)}</code>`,'—','—','—','—',esc(e.message)]); }
+      }
+      el.innerHTML = table(['Asset','Status','PASS','WARNING','ERROR','Diagnostics'], rows);
+    } else if (active === 'Jobs') {
+      const assets = await get('/assets?limit=500');
+      el.innerHTML = `<p class="note">Processing jobs recorded by the CLI / GitHub Actions. Query a job directly at <code>/api/v1/processing-jobs/{job_id}</code>.</p>` +
+        `<pre>${esc(JSON.stringify({published_assets:assets.length, endpoint:'/api/v1/processing-jobs/{job_id}'},null,2))}</pre>`;
+    } else {
+      const ep = ['/health','/assets','/assets/{asset_id}','/assets/{asset_id}/metadata','/assets/{asset_id}/download',
+            '/assets/{asset_id}/signed-url','/models','/models/{model_id}','/models/{model_id}/compatible-animations',
+            '/animations','/animations/{animation_id}','/processing-jobs/{job_id}','/releases/latest','/reports/{kind}/{asset_id}'];
+      el.innerHTML = `<p class="note">Versioned API. Set <code>ASSET_STUDIO_API_KEY</code> to require the <code>X-API-Key</code> header; rate limiting is enabled by default.</p>` +
+        table(['Endpoint','Interactive'], [['<code>'+API+'</code>','<a href="/docs">OpenAPI docs</a>'],
+          ...ep.map(e=>[`<code>${esc(e)}</code>`, `<a href="${API}${esc(e.replace(/\{.*/,''))}" target="_blank">try</a>`])]);
+    }
+    document.getElementById('error').innerHTML = '';
+  } catch (e) {
+    document.getElementById('error').innerHTML = `<div class="error">${esc(e.message)}</div>`;
+  }
+}
+function filterTable() {
+  const q = document.getElementById('q').value.toLowerCase();
+  document.querySelectorAll('tbody tr').forEach(tr => tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none');
+}
+document.getElementById('tabs').innerHTML = tabs.map(t => `<button onclick="active='${t}';render()">${t}</button>`).join('');
+render();
+</script>
+</body>
+</html>

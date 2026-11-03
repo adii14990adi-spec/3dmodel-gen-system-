@@ -1,0 +1,5 @@
+-keepclasseswithmembernames class * { native <methods>; }
+-keep class com.google.android.filament.** { *; }
+-keep class com.google.android.filament.gltfio.** { *; }
+-keep class com.assetstudio.** { *; }
+-keepattributes *Annotation*, InnerClasses, Signature

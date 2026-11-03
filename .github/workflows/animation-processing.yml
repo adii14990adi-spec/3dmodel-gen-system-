@@ -1,0 +1,84 @@
+name: Animation Processing
+
+on:
+  push:
+    paths:
+      - 'assets/animation/**'
+      - 'assets/models/characters/**'
+      - 'processing/**'
+      - 'config/bone_mappings/**'
+  workflow_dispatch:
+    inputs:
+      all:
+        description: 'Reprocess every animation'
+        type: boolean
+        default: false
+      paths:
+        description: 'Space-separated source paths (optional)'
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+concurrency:
+  group: animation-processing-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  process:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      PYTHONUNBUFFERED: '1'
+      BLENDER_DISABLE_AUTOEXEC: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11', cache: 'pip' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Install pinned dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          npm ci --prefix tools/gltf-validator || npm install --prefix tools/gltf-validator
+      - name: Install headless Blender 4.2 LTS
+        run: |
+          curl -fsSL https://download.blender.org/release/Blender4.2/blender-4.2.23-linux-x64.tar.xz -o /tmp/blender.tar.xz
+          mkdir -p /opt/blender && tar -xJf /tmp/blender.tar.xz -C /opt/blender --strip-components=1
+          echo "/opt/blender" >> "$GITHUB_PATH"
+      - name: Ensure model manifests exist
+        run: python scripts/run_pipeline.py process-models --all
+      - name: Resolve changed animation sources
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.all }}" = "true" ]; then
+            echo "args=--all" >> "$GITHUB_OUTPUT"
+          elif [ -n "${{ inputs.paths }}" ]; then
+            echo "args=${{ inputs.paths }}" >> "$GITHUB_OUTPUT"
+          else
+            FILES=$(python scripts/changed_files.py --base "${{ github.event.before }}" --head "${{ github.sha }}" --kind animation)
+            echo "args=$FILES" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Process animations
+        if: steps.changes.outputs.args != ''
+        run: python scripts/run_pipeline.py process-animations ${{ steps.changes.outputs.args }}
+      - name: Build index
+        run: python scripts/run_pipeline.py build-index
+      - name: Upload reports, manifests and runtime GLBs
+        uses: actions/upload-artifact@v4
+        with:
+          name: animation-publication-${{ github.run_id }}
+          path: |
+            manifests/
+            reports/
+            processed/animations/
+          retention-days: 14
+      - name: Publish to persistent object storage
+        env:
+          ASSET_STUDIO_S3_BUCKET: ${{ secrets.ASSET_STUDIO_S3_BUCKET }}
+          ASSET_STUDIO_S3_ENDPOINT: ${{ secrets.ASSET_STUDIO_S3_ENDPOINT }}
+          ASSET_STUDIO_S3_ACCESS_KEY: ${{ secrets.ASSET_STUDIO_S3_ACCESS_KEY }}
+          ASSET_STUDIO_S3_SECRET_KEY: ${{ secrets.ASSET_STUDIO_S3_SECRET_KEY }}
+        run: python scripts/publish_storage.py --prefix "staging/${{ github.run_id }}" --then-promote
