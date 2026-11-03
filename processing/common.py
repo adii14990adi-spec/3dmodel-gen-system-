@@ -4,6 +4,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -74,11 +76,35 @@ def write_bytes_atomic(path: Path, data: bytes) -> None:
     tmp.replace(path)
 
 
+def normalize_path(relative_path: str) -> str:
+    """Canonical repo-relative path: POSIX separators, NFC unicode, no leading './'."""
+    path = str(relative_path).replace("\\", "/")
+    while path.startswith("./"):
+        path = path[2:]
+    return unicodedata.normalize("NFC", path)
+
+
 def asset_id(kind: str, relative_path: str, source_hash: str) -> str:
-    stem = Path(relative_path).stem.lower()
-    safe = "".join(c if c.isalnum() else "_" for c in stem)[:32]
+    """Deterministic, collision-resistant identifier for one source asset.
+
+    The digest covers kind + canonical source path + content hash, so:
+
+    * same path and same bytes  -> same id (idempotent reprocessing);
+    * same path and new bytes   -> new id (a version, never an overwrite);
+    * identical bytes copied to another path -> different id (no collision);
+    * model and animation ids never share a namespace.
+
+    Only the digest is derived from the path; the readable stem stays a label.
+    """
+    canonical = normalize_path(relative_path)
+    stem = Path(canonical).stem.lower()
+    # ASCII-only label: ids appear in URLs and object-storage keys, so keep them
+    # portable even when the source filename is not.
+    safe = re.sub(r"_+", "_", "".join(c if c.isascii() and c.isalnum() else "_"
+                                      for c in stem)).strip("_")[:32] or "asset"
+    digest = hashlib.sha256(f"{kind}\0{canonical}\0{source_hash}".encode("utf-8")).hexdigest()
     prefix = "model" if kind == "model" else "anim"
-    return f"{prefix}_{safe}_{source_hash[:8]}"
+    return f"{prefix}_{safe}_{digest[:8]}"
 
 
 class UnsafeAssetError(ValueError):
@@ -86,19 +112,26 @@ class UnsafeAssetError(ValueError):
 
 
 def validate_source(path: Path, kind: str, max_bytes: int | None = None) -> None:
-    """Treat uploaded 3D files as untrusted: enforce suffix, size and path safety."""
+    """Treat uploaded 3D files as untrusted: enforce suffix, size and path safety.
+
+    Validation is read-only: it opens nothing, executes nothing and never
+    rewrites the source. Malformed *contents* are rejected later by the parser
+    (CONVERSION_FAILED / GLB_PARSE_FAILED reports), never by execution.
+    """
     cfg = load_config()
-    limit = max_bytes or int(cfg["limits"]["max_source_bytes"])
+    limit = int(cfg["limits"]["max_source_bytes"]) if max_bytes is None else max_bytes
     suffix = path.suffix.lower()
     allowed = SUPPORTED_MODELS if kind == "model" else SUPPORTED_ANIMATIONS
     if suffix in UNSAFE_SUFFIXES or suffix not in allowed:
         raise UnsafeAssetError(f"unsupported or unsafe file type: {suffix or '(none)'}")
     resolved = path.resolve()
-    if ROOT.resolve() not in resolved.parents and resolved != ROOT.resolve():
+    root = ROOT.resolve()
+    if root not in resolved.parents and resolved != root:
+        # Also covers symlinks inside the repo that point outside it.
         raise UnsafeAssetError("path escapes the repository root")
-    if not path.is_file():
-        raise UnsafeAssetError("source file does not exist")
-    size = path.stat().st_size
+    if not resolved.is_file():
+        raise UnsafeAssetError("source is not a regular file (missing, directory or dangling link)")
+    size = resolved.stat().st_size
     if size == 0:
         raise UnsafeAssetError("source file is empty")
     if size > limit:

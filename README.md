@@ -13,7 +13,7 @@ Kotlin/Compose/**Google Filament** viewer for Android.
 
 > **Honest status.** The Python pipeline, Khronos validation, FastAPI/SQLite metadata API, signed downloads,
 > operations console, native Android source tree and automated tests are **implemented and executed in this
-> workspace** — re-verified on 2026-11-03 (42 tests green, 8 models and 10 animations processed, 16 exported GLBs at
+> workspace** — re-verified on 2026-11-03 (109 tests green, 8 models and 10 animations processed, 16 exported GLBs at
 > 0 Khronos errors). **A compiled APK, physical-device tests and live S3/CI runs are not available here**, because this
 > sandbox has no JDK, Android SDK or device and no cloud credentials. Every unexecuted item and its exact remaining
 > setup steps are listed in [`docs/limitations.md`](docs/limitations.md). Nothing below is marked "done" unless its
@@ -97,11 +97,13 @@ model-agnostic so a future generator can be plugged in without touching them.
 |---|---|
 | Added / modified detection via Git diff (`scripts/changed_files.py`) | ✅ implemented |
 | Path-triggered workflows + `workflow_dispatch` (all / explicit paths) | ✅ implemented, not run in CI here |
-| Format identification from bytes, not extensions alone | ✅ implemented |
+| Extension allowlist at ingestion + real byte inspection during processing | ✅ implemented |
 | Stable asset IDs derived from source path + content hash | ✅ implemented |
 | Originals preserved; processed copies generated separately | ✅ implemented |
 | Animation → intended character association through runtime targets | ✅ implemented |
 | Overwrite prevention via content-addressed IDs | ✅ implemented |
+| Deleted/renamed files never reprocessed as existing assets | ✅ implemented + tested |
+| Sources byte-identical before/after processing | ✅ verified by test |
 
 Supported inputs: models `.glb .gltf .fbx .obj .stl .ply`; animations `.glb .gltf .fbx .bvh .dae`.
 Pure Python handles GLB/glTF/BVH; FBX/OBJ/STL/PLY/DAE require the Blender path in CI.
@@ -262,7 +264,7 @@ ASSET_STUDIO_API_KEY=change-me .venv/bin/uvicorn backend.app:app --host 0.0.0.0 
 #    http://localhost:8000/api/v1/health
 
 # 5. Tests
-.venv/bin/python -m pytest -q                                 # 42 passed
+.venv/bin/python -m pytest -q                                 # 109 passed
 .venv/bin/python scripts/check_android_sources.py             # no JDK required
 ```
 
@@ -379,7 +381,7 @@ Each milestone must pass its acceptance tests before the next is considered comp
 - **CI rules** — tests run automatically, failures stay visible, checks are never disabled to force a green build,
   releases require verified signing configuration.
 
-Last local run (2026-11-03): `42 passed`, 8 model manifests (6 PASS / 2 ERROR), 10 animation manifests (9 runtime
+Last local run (2026-11-03): `109 passed`, 8 model manifests (6 PASS / 2 ERROR), 10 animation manifests (9 runtime
 GLBs, 1 deliberate incompatible quadruped), 16 valid GLBs at Khronos `E0 W0`.
 
 ---

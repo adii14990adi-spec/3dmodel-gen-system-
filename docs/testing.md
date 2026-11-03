@@ -10,13 +10,49 @@ npm ci --prefix tools/gltf-validator
 .venv/bin/python -m processing.cli process-animations --all   # 10 animations, 0 failures
 .venv/bin/python -m processing.cli build-index
 .venv/bin/python -m processing.cli validate                   # all exported GLBs: 0 errors
-.venv/bin/python -m pytest -q                                 # 42 passed
+.venv/bin/python -m pytest -q                                 # 109 passed
 .venv/bin/python scripts/check_android_sources.py             # passed
 ```
 
 One nonfatal `StarletteDeprecationWarning` about `httpx` in `starlette.testclient` is emitted by the pinned FastAPI/Starlette combination; it does not affect results.
 
 `pytest` covers: GLB write/parse/inspection, truncation rejection, empty-array stripping, untrusted file limits and traversal, BVH parsing/frame validation, humanoid role aliases and ambiguity, compatibility (compatible/incompatible), real retarget output (one clip, skin, triangles, duration), report diagnostic fields, manifest hashes/no credentials, all required API endpoints, downloads, signed URLs, auth, rate-limit configuration, playable semantics, job/report endpoints, end-to-end published outputs, Khronos validation of every exported GLB, quadruped rejection, index counts and Android source structure.
+
+## Step 02 — asset ingestion tests (executed 2026-11-03)
+
+`tests/unit/test_ingestion.py` — 65 focused tests, all executed in this workspace. Changed-file detection
+runs against **real temporary git repositories** (created, committed, renamed and shallow-cloned inside the
+test), never against mocks.
+
+| Area | Cases covered |
+|---|---|
+| Changed-file detection | added (per kind), modified, deleted (never returned), rename (new path only), unrelated docs/code changes, empty diff, zero/absent SHA (→ `--all`), unknown ref, shallow history, multiple assets in one commit, spaces / quotes / `$` / unicode names, `--null` round-trip, unsupported + unsafe extensions filtered, uppercase extensions, kind prefixes not leaking, option-like refs rejected without side effects, `--all` flag preserved |
+| Stable identity | same path+content stable, content change → new id, identical bytes at different paths do **not** collide, model vs animation distinct, OS-independent (backslashes, `./`, NFD vs NFC unicode), deterministic across processes, id shape/ASCII |
+| Source validation | unsupported + unsafe suffixes, empty, oversize, missing, directory, traversal, symlink escape, dangling symlink, case-insensitive extensions, all 8 supported formats accepted per kind (`glb gltf fbx obj stl ply` / `glb gltf fbx bvh dae`), validation is read-only, embedded scripts never executed, malformed/truncated GLB → `ERROR` with no runtime GLB, CLI exits `1` on a rejected source |
+| Immutability | whole `assets/` tree hashed before/after processing a model and an animation (identical), processed output written under `processed/` only, reprocessing idempotent |
+
+Workflow wiring was verified by running the exact shell of both resolve/process steps against a scratch
+repository: 3 tricky file names survived `--null` → `xargs -0` byte-exact, an empty change set produced
+`count=0` and skipped processing, a zero SHA and `workflow_dispatch all=true` produced `--all`, and a
+docs-only diff produced `count=0`.
+
+Results: `109 passed` (`pytest -q`), `scripts/check_android_sources.py` passed, pipeline regenerated
+8 model manifests (6 PASS / 2 ERROR) and 10 animation manifests (9 runtime GLBs, 1 incompatible quadruped).
+
+#### Verified defects fixed in Step 02
+
+1. Non-ASCII source paths were silently dropped: `git diff` C-quoted them (`"assets/.../\303\274n..."`), so the
+   `assets/models/` prefix never matched. Fixed with `-z` + `core.quotepath=false`.
+2. A zero/absent `before` SHA diffed `HEAD~1`, so a multi-commit branch push only processed its tip commit and
+   silently skipped new assets in earlier commits. Now it falls back to `--all`.
+3. Identical bytes at two different paths produced the same asset id (`model_warrior_<hash8>`), so the second
+   asset overwrote the first manifest. The digest now covers the canonical path.
+4. Backslash paths (Windows) produced a different id than POSIX paths, and NFD/NFC unicode differed. Both are
+   normalised.
+5. File names with spaces broke the workflows (word-splitting) and were interpolated into shell text. Tokens are
+   now NUL-separated and consumed with `xargs -0`.
+6. Command-line option injection: a `--base` value such as `--output=/tmp/x` was passed to `git` as an option.
+   Refs now have to match a ref grammar and may not start with `-`.
 
 ## Dataset A–L (real generated GLB/BVH bytes, tracked as small test fixtures)
 
