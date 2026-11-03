@@ -52,18 +52,28 @@ jobs:
         run: python scripts/run_pipeline.py process-models --all
       - name: Resolve changed animation sources
         id: changes
+        shell: bash
         run: |
+          set -euo pipefail
+          # NUL-separated tokens keep paths with spaces, quotes or unicode intact
+          # and avoid interpolating file names into shell code.
+          LIST="${RUNNER_TEMP:-/tmp}/animation-changes.bin"
+          : > "$LIST"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.all }}" = "true" ]; then
-            echo "args=--all" >> "$GITHUB_OUTPUT"
+            printf -- '--all\0' > "$LIST"
           elif [ -n "${{ inputs.paths }}" ]; then
-            echo "args=${{ inputs.paths }}" >> "$GITHUB_OUTPUT"
+            # shellcheck disable=SC2086 - the input is an intentionally space-separated list
+            for p in ${{ inputs.paths }}; do printf '%s\0' "$p"; done > "$LIST"
           else
-            FILES=$(python scripts/changed_files.py --base "${{ github.event.before }}" --head "${{ github.sha }}" --kind animation)
-            echo "args=$FILES" >> "$GITHUB_OUTPUT"
+            python scripts/changed_files.py --base "${{ github.event.before }}" --head "${{ github.sha }}" --kind animation --null > "$LIST"
           fi
+          count=$(tr -cd '\0' < "$LIST" | wc -c | tr -d ' ')
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "list=$LIST" >> "$GITHUB_OUTPUT"
+          echo "Resolved $count source token(s)"
       - name: Process animations
-        if: steps.changes.outputs.args != ''
-        run: python scripts/run_pipeline.py process-animations ${{ steps.changes.outputs.args }}
+        if: steps.changes.outputs.count != '0'
+        run: xargs -0 -r python scripts/run_pipeline.py process-animations < "${{ steps.changes.outputs.list }}"
       - name: Build index
         run: python scripts/run_pipeline.py build-index
       - name: Upload reports, manifests and runtime GLBs

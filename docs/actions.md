@@ -10,7 +10,12 @@
 
 ## Changed-file detection
 
-`scripts/changed_files.py --base <before> --head <sha> --kind model|animation` filters `git diff --name-only --diff-filter=ACMR` to supported source paths. A single changed asset does not trigger a full rebuild. `workflow_dispatch` accepts `all=true` for a full reprocess or an explicit path list. Both processing workflows use `concurrency` groups so overlapping runs do not publish conflicting manifests.
+`scripts/changed_files.py --base <before> --head <sha> --kind model|animation --null` runs `git -c core.quotepath=false diff --name-only -z --diff-filter=ACMR <base> <head> --` and filters the result to the kind's prefix and extension allowlist. Deleted files never reach the pipeline, a rename yields only the new path, and an empty change set makes the workflow skip processing cleanly (`count=0`).
+
+The workflow writes NUL-separated tokens to `$RUNNER_TEMP` and runs `xargs -0 -r python scripts/run_pipeline.py process-…`, so paths with spaces, quotes or unicode stay intact and are never interpolated into shell code. When the diff cannot be trusted (zero/absent `before` SHA on a new branch, force push, shallow history, unknown or option-like ref) the script prints `--all` and the job processes everything instead of silently skipping assets. The resolve step uses `set -euo pipefail`, so a genuine resolution failure fails the workflow.
+
+`workflow_dispatch` accepts `all=true` for a full reprocess or a space-separated `paths` list (`all=true` is required for file names containing spaces, because that input is whitespace-split). Both processing workflows use `concurrency` groups so
+overlapping runs do not publish conflicting manifests.
 
 ## Runners are temporary
 
@@ -27,6 +32,6 @@ Each job installs its own Python/Node/Blender; nothing persists on the runner. O
 
 ## Recovery
 
-Every CLI invocation records a job in `reports/jobs/<job-id>.json` with status, message and asset ids (`GET /api/v1/processing-jobs/{job_id}`). Publication uses a staging prefix so a failed run never leaves half-written final objects. Re-running the same workflow is idempotent because asset ids are derived from the source relative path + SHA-256 and manifests are written atomically (`.tmp` then `replace`).
+Every CLI invocation records a job in `reports/jobs/<job-id>.json` with status, message and asset ids (`GET /api/v1/processing-jobs/{job_id}`). Publication uses a staging prefix so a failed run never leaves half-written final objects. Re-running the same workflow is idempotent because asset ids hash the canonical source path together with the source SHA-256 (`processing.common.asset_id`) and manifests are written atomically (`.tmp` then `replace`).
 
 **Not executed here:** these workflows are untested in this sandbox (no GitHub Actions runner); `validation.yml` mirrors the exact commands that were run locally.
