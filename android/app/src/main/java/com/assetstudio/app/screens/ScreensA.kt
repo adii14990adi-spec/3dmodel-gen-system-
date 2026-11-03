@@ -313,15 +313,23 @@ fun SkeletonInspectorScreen(vm: StudioViewModel, nav: NavController) {
         }
         Spacer(Modifier.height(8.dp))
         Section("Bone hierarchy (real names, parent/children)") {
-            fun tree(name: String, depth: Int): Unit {
+            // Flatten the tree first; Composable calls must not live inside a local helper.
+            val rows = mutableListOf<Pair<String, Int>>()
+            fun walk(name: String, depth: Int) {
                 val b = sk.bone(name) ?: return
-                Row(Modifier.fillMaxWidth().padding(start = (depth * 12).dp).clickable { vm.skeletonInspector.select(name) }) {
-                    Text(if (state.selectedBone?.name == name) "● ${b.name}" else "○ ${b.name}",
+                rows += name to depth
+                if (name in state.expanded) b.children.forEach { walk(it, depth + 1) }
+            }
+            vm.skeletonInspector.rootBones().forEach { walk(it.name, 0) }
+            rows.forEach { (name, depth) ->
+                val b = sk.bone(name) ?: return@forEach
+                Row(Modifier.fillMaxWidth().padding(start = (depth * 12).dp)
+                    .clickable { vm.skeletonInspector.select(name) }) {
+                    Text("${if (state.selectedBone?.name == name) "●" else "○"} ${b.name} " +
+                        "(parent: ${b.parent ?: "root"}, children: ${b.children.size})",
                         style = MaterialTheme.typography.bodySmall)
                 }
-                if (name in state.expanded) b.children.forEach { tree(it, depth + 1) }
             }
-            vm.skeletonInspector.rootBones().forEach { tree(it.name, 0) }
         }
         Spacer(Modifier.height(8.dp))
         state.selectedBone?.let { b ->

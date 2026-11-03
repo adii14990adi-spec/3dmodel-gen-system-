@@ -125,7 +125,8 @@ class FilamentViewport(private val surfaceView: SurfaceView) :
     fun resetCamera() = camera(CameraPreset.RESET)
 
     fun camera(preset: CameraPreset) {
-        val (ex,ey,ez,ux,uy,uz) = when (preset) {
+        // Kotlin arrays only provide component1()..component5(), so index explicitly.
+        val v = when (preset) {
             CameraPreset.FRONT -> floatArrayOf(0f,0f,4f,0f,1f,0f)
             CameraPreset.BACK -> floatArrayOf(0f,0f,-4f,0f,1f,0f)
             CameraPreset.LEFT -> floatArrayOf(-4f,0f,0f,0f,1f,0f)
@@ -134,8 +135,8 @@ class FilamentViewport(private val surfaceView: SurfaceView) :
             CameraPreset.BOTTOM -> floatArrayOf(0f,-4f,0.001f,0f,0f,1f)
             CameraPreset.RESET -> floatArrayOf(2.4f,1.6f,2.8f,0f,1f,0f)
         }
-        runCatching { modelViewer.camera.lookAt(ex.toDouble(),ey.toDouble(),ez.toDouble(),
-            0.0,0.9,0.0,ux.toDouble(),uy.toDouble(),uz.toDouble()) }
+        runCatching { modelViewer.camera.lookAt(v[0].toDouble(),v[1].toDouble(),v[2].toDouble(),
+            0.0,0.9,0.0,v[3].toDouble(),v[4].toDouble(),v[5].toDouble()) }
         applyProjection()
     }
 
