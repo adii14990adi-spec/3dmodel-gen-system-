@@ -22,7 +22,7 @@ limits:
 runtime:
   primary_format: "GLB"
   secondary_format: "GLTF"
-  filament_version: "1.80.0"
+  filament_version: "1.77.3"
   ktx2_enabled: false               # only if runtime decoding is available
 
 compatibility:
@@ -46,4 +46,4 @@ android:
   compile_sdk: 35
   min_sdk: 26
   jdk: 17
-  filament: "1.80.0"
+  filament: "1.77.3"

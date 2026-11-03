@@ -40,7 +40,7 @@ def main() -> int:
         if re.search(pattern, sources):
             failures.append(f"possible hardcoded secret matching {pattern}")
     versions = (ANDROID / "gradle/libs.versions.toml").read_text()
-    for expected in ['agp = "8.7.3"', 'kotlin = "2.0.21"', 'filament = "1.80.0"',
+    for expected in ['agp = "8.7.3"', 'kotlin = "2.0.21"', 'filament = "1.77.3"',
                      'composeBom = "2024.12.01"']:
         if expected not in versions:
             failures.append(f"version pin missing: {expected}")

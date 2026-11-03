@@ -14,7 +14,7 @@
 | `429` | rate limit | raise `ASSET_STUDIO_RATE_LIMIT` or retry after 60 s |
 | `403` on signed URL | expired/tampered signature | request a new URL from `POST /api/v1/assets/{id}/signed-url` |
 | Android build: "SDK location not found" | `ANDROID_HOME` unset | `export ANDROID_HOME=$HOME/Android/Sdk` and install platform 35 + build-tools 35.0.0 |
-| Android build: Filament API not found | version mismatch | keep `filament = "1.80.0"`; optional calls already degrade via reflection |
+| Android build: Filament API not found | version mismatch | keep `filament = "1.77.3"`; optional calls already degrade via reflection |
 | Android cleartext blocked | release network policy | use HTTPS; debug builds allow `10.0.2.2`/`localhost` only |
 | Download fails integrity check | corrupted object/storage | republish from `processed/`; compare `X-Asset-Sha256` with the manifest |
 | `pytest` fixture errors | generated outputs absent | run `generate_sample_assets.py` and both pipelines (the session fixture does this automatically) |

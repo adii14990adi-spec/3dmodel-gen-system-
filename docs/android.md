@@ -9,7 +9,7 @@
 | Kotlin | 2.0.21 |
 | KSP | 2.0.21-1.0.25 |
 | Compose BOM | 2024.12.01 |
-| Filament / gltfio / filament-utils | 1.80.0 |
+| Filament / gltfio / filament-utils | 1.77.3 |
 | Room | 2.6.1 |
 | DataStore Preferences | 1.1.1 |
 | Retrofit | 2.11.0 · OkHttp 4.12.0 · kotlinx-serialization 1.7.3 |

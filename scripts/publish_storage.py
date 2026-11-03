@@ -10,8 +10,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+# Allow `python scripts/publish_storage.py` from a clean Actions checkout,
+# where only the script's own directory is on sys.path by default.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from processing.common import ROOT, path_for, sha256_file
 

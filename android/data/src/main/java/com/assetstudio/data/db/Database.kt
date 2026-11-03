@@ -38,7 +38,7 @@ interface CachedAssetDao {
     @Query("SELECT COUNT(*) FROM cached_assets") fun count(): Flow<Int>
 }
 
-@Database(entities = [CachedAssetEntity::class], version = 1, exportSchema = true)
+@Database(entities = [CachedAssetEntity::class], version = 1, exportSchema = false)
 abstract class AssetDatabase : RoomDatabase() {
     abstract fun cachedAssetDao(): CachedAssetDao
     companion object {

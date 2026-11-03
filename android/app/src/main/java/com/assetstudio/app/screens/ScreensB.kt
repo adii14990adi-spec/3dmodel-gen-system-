@@ -208,6 +208,7 @@ fun ModelPicker(vm: StudioViewModel, models: List<com.assetstudio.core.model.Ass
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ValidationReportScreen(vm: StudioViewModel, nav: NavController) {
     val ui by vm.ui.collectAsState()

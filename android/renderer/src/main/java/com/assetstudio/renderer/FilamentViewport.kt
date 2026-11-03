@@ -10,6 +10,7 @@ import com.assetstudio.core.model.CameraPreset
 import com.assetstudio.core.model.Quality
 import com.assetstudio.core.model.RenderMode
 import com.google.android.filament.Camera
+import com.google.android.filament.MaterialInstance
 import com.google.android.filament.EntityManager
 import com.google.android.filament.gltfio.AssetLoader
 import com.google.android.filament.gltfio.FilamentAsset
@@ -50,7 +51,7 @@ class FilamentViewport(private val surfaceView: SurfaceView) :
     var skeletonLines: List<DebugLine> = emptyList()
         set(v) { field = v; refreshOverlay() }
     var exposure = 1f
-        set(v) { field = v; invokeOptional(modelViewer.camera, "setExposure", arrayOf(v)) }
+        set(v) { field = v; runCatching { modelViewer.camera.setExposure(v) } }
     var orthographic = false
         set(v) { field = v; applyProjection() }
     var onModelLoaded: ((Int) -> Unit)? = null
@@ -90,8 +91,9 @@ class FilamentViewport(private val surfaceView: SurfaceView) :
         renderMode = mode
         val asset = modelViewer.asset ?: return
         runCatching {
-            for (i in 0 until asset.materialInstanceCount) {
-                val mi = asset.getMaterialInstanceAt(i)
+            val instances: Array<MaterialInstance> =
+                runCatching { asset.instance.materialInstances }.getOrDefault(emptyArray())
+            for (mi in instances) {
                 when (mode) {
                     RenderMode.SOLID -> mi.setParameter("baseColorFactor", 0.75f, 0.78f, 0.82f, 1f)
                     RenderMode.WIREFRAME, RenderMode.XRAY, RenderMode.NORMALS ->
@@ -105,11 +107,16 @@ class FilamentViewport(private val surfaceView: SurfaceView) :
 
     fun applyQuality(q: Quality) {
         quality = q
-        invokeOptional(modelViewer.view, "setSampleCount", arrayOf(if (q == Quality.HIGH) 4 else 1))
+        runCatching { modelViewer.view.setSampleCount(if (q == Quality.HIGH) 4 else 1) }
     }
 
-    fun setHdr(on: Boolean) = invokeOptional(modelViewer.view, "setPostProcessingEnabled", arrayOf(on))
-    fun setShadows(on: Boolean) = invokeOptional(modelViewer.view, "setShadowingEnabled", arrayOf(on))
+    fun setHdr(on: Boolean) {
+        runCatching { modelViewer.view.setPostProcessingEnabled(on) }
+    }
+
+    fun setShadows(on: Boolean) {
+        runCatching { modelViewer.view.setShadowingEnabled(on) }
+    }
     fun setGrid(on: Boolean) { showGrid = on; refreshOverlay() }
     fun setAxes(on: Boolean) { showAxes = on; refreshOverlay() }
     fun setGround(on: Boolean) { showGround = on; refreshOverlay() }
@@ -136,22 +143,15 @@ class FilamentViewport(private val surfaceView: SurfaceView) :
         runCatching { modelViewer.camera.setProjection(45.0,
             surfaceView.width.toDouble() / surfaceView.height.coerceAtLeast(1).toDouble(),
             0.05, 100.0, Camera.Fov.VERTICAL) }
-        if (orthographic) invokeOptional(modelViewer.camera, "setProjection",
-            arrayOf(Camera.Projection.ORTHO, -1.5, 1.5, -1.5, 1.5, 0.05, 100.0))
+        if (orthographic) applyOrtho()
     }
 
-    /** Applies optional Filament APIs without hard compile-time coupling to version specifics. */
-    private fun invokeOptional(target: Any, method: String, args: Array<Any>) {
+    /** ModelViewer refreshes its perspective projection on viewport changes; re-apply ortho. */
+    private fun applyOrtho() {
         runCatching {
-            val types = args.map { it.javaClass }.toTypedArray()
-            val found = target.javaClass.methods.firstOrNull { m ->
-                m.name == method && m.parameterTypes.size == types.size &&
-                    m.parameterTypes.indices.all { i ->
-                        m.parameterTypes[i].isAssignableFrom(types[i]) ||
-                        (m.parameterTypes[i].isPrimitive &&
-                            m.parameterTypes[i].simpleName.equals(types[i].simpleName, true)) }
-            }
-            found?.invoke(target, *args)
+            modelViewer.camera.setProjection(
+                Camera.Projection.ORTHO, -1.5, 1.5, -1.5, 1.5, 0.05, 100.0
+            )
         }
     }
 
@@ -161,14 +161,14 @@ class FilamentViewport(private val surfaceView: SurfaceView) :
             val lines = DebugGlbBuilder.gridAndAxes(showGrid, showAxes).toMutableList()
             if (showSkeleton) lines += skeletonLines
             if (lines.isNotEmpty()) {
-                val a = overlayLoader.createAssetFromBinary(DebugGlbBuilder.build(lines))
+                val a = overlayLoader.createAsset(DebugGlbBuilder.build(lines))
                 if (a != null) { scene.addEntity(a.root); overlayAsset = a }
             }
         }
         runCatching {
             groundAsset?.let { scene.removeEntity(it.root) }; groundAsset = null
             if (showGround) {
-                val g = overlayLoader.createAssetFromBinary(DebugGlbBuilder.ground())
+                val g = overlayLoader.createAsset(DebugGlbBuilder.ground())
                 if (g != null) { scene.addEntity(g.root); groundAsset = g }
             }
         }
@@ -181,6 +181,7 @@ class FilamentViewport(private val surfaceView: SurfaceView) :
         if (lastTick > 0L) animationTick?.invoke(nanos - lastTick)
         lastTick = nanos
         lastFrame = nanos
+        if (orthographic) applyOrtho()
         modelViewer.render(nanos)
         frames++
         if (fpsStart == 0L) fpsStart = nanos
