@@ -50,7 +50,9 @@ def fetch(url: str, timeout: float = 30.0) -> tuple[bytes, dict[str, str]]:
                                                    "Accept": "*/*"})
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            return response.read(), {k.lower(): v for k, v in response.headers.items()}
+            headers = {k.lower(): v for k, v in response.headers.items()}
+            headers["status"] = str(response.status)
+            return response.read(), headers
     except urllib.error.HTTPError as exc:
         raise VerifyError(f"HTTP {exc.code} for {url}") from exc
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
@@ -103,9 +105,24 @@ def verify_catalog(base_url: str, *, samples: int = 2, timeout: float = 30.0,
     URLs under the base URL) is unchanged.
     """
     base_url = base_url.rstrip("/")
-    read: Callable[[str], tuple[bytes, dict[str, str]]] = (
+    basic: Callable[[str], tuple[bytes, dict[str, str]]] = (
         (lambda url: fetch_from_site_dir(url, base_url, site_dir)) if site_dir is not None
         else (lambda url: fetch(url, timeout)))
+    # Live reads are recorded so the caller can publish one annotation per URL: the
+    # served status, content type, byte count and digest are the actual proof.
+    probed: dict[str, dict[str, Any]] = {}
+
+    def read(url: str) -> tuple[bytes, dict[str, str]]:
+        body, headers = basic(url)
+        if site_dir is None:  # a directory read is not HTTP evidence
+            probed.setdefault(url, {
+            "url": url,
+            "status": headers.get("status", "200"),
+            "content_type": headers.get("content-type", ""),
+            "bytes": len(body),
+            "sha256": hashlib.sha256(body).hexdigest(),
+        })
+        return body, headers
     source = f"site directory {site_dir}" if site_dir is not None else "live HTTP"
 
     index_url = f"{base_url}/catalog/index.json"
@@ -137,6 +154,7 @@ def verify_catalog(base_url: str, *, samples: int = 2, timeout: float = 30.0,
         "verified_assets": [],
         "verified_dependencies": 0,
         "bytes": 0,
+        "http": probed,
     }
 
     for kind in ("models", "animations"):
@@ -219,6 +237,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument("--site-dir", default=None,
                         help="verify a built site tree instead of the live host (pre-deploy check)")
+    parser.add_argument("--probe", action="store_true",
+                        help="print one ::notice annotation per fetched URL (live HTTP only)")
     parser.add_argument("--report", default=None, help="write the JSON result here")
     parser.add_argument("--allow-http", action="store_true",
                         help="accept http:// (local smoke tests only; Pages is always https)")
@@ -262,6 +282,21 @@ def main(argv: list[str] | None = None) -> int:
               f"sha256={asset['sha256'][:12]}… gltf={asset['gltf']} "
               f"deps={asset['dependencies']}")
     print(f"dependencies        {result['verified_dependencies']} sidecar(s) verified")
+    if args.probe:
+        http = result.get("http") or {}
+        kinds = {"glb": "GLB", "gltf": "glTF", "bin": "BIN", "png": "PNG"}
+        for position, entry in enumerate(http.values(), start=1):
+            url = entry["url"]
+            if url.endswith("/catalog/index.json"):
+                label = "catalog"
+            elif "/catalog/" in url and url.endswith(".json"):
+                label = "manifest"
+            else:
+                label = kinds.get(url.split(".")[-1].split("?")[0], "-")
+            print(f"::notice title=Live HTTP {position} ({label})::{entry['url']} -> "
+                  f"HTTP {entry['status']}, {entry['bytes']} bytes, "
+                  f"{entry['content_type'] or 'no content-type'}, "
+                  f"sha256={entry['sha256'][:16]}…")
     print("PASS: GitHub Pages catalog, manifests, GLBs and glTF sidecars all verified")
 
     if args.report:

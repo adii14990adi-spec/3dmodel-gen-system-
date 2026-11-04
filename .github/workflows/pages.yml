@@ -161,12 +161,10 @@ jobs:
   deploy:
     name: deploy site
     needs: build
-    # Only the default branch publishes automatically; feature branches run the build
-    # job only. A manual dispatch may opt in explicitly (`deploy: true`) for a one-off
-    # publication of a branch that is under review.
-    if: >-
-      github.ref == 'refs/heads/main' ||
-      (github.event_name == 'workflow_dispatch' && inputs.deploy == true)
+    # Only the default branch publishes here: this job runs inside the `github-pages`
+    # environment, whose branch policy allows `main` alone. Review branches publish
+    # through `deploy-review` below instead.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-22.04
     environment:
       name: github-pages
@@ -218,7 +216,7 @@ jobs:
           PAGES_URL: ${{ steps.deployment.outputs.page_url }}
         run: |
           python scripts/verify_pages_deployment.py \
-            --base-url "$PAGES_URL" --samples 3 --report pages-verification.json
+            --base-url "$PAGES_URL" --samples 5 --probe --report pages-verification.json
       - name: Upload the verification report
         if: always()
         uses: actions/upload-artifact@v4
@@ -271,7 +269,7 @@ jobs:
           PAGES_URL: ${{ steps.deployment.outputs.page_url }}
         run: |
           python scripts/verify_pages_deployment.py \
-            --base-url "$PAGES_URL" --samples 5 --report pages-verification.json
+            --base-url "$PAGES_URL" --samples 5 --probe --report pages-verification.json
       - name: Upload the verification report
         if: always()
         uses: actions/upload-artifact@v4

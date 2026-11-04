@@ -28,7 +28,11 @@ if str(ROOT) not in sys.path:
 from processing.glb import write_glb  # noqa: E402
 from scripts.build_pages_site import (  # noqa: E402
     SiteError, build_catalog, glb_to_gltf, normalise_base_url, pages_base_url, write_site)
-from scripts.verify_pages_deployment import VerifyError, verify_catalog  # noqa: E402
+from scripts.verify_pages_deployment import (  # noqa: E402
+    VerifyError,
+    main,
+    verify_catalog,
+)
 
 BASE = "https://example-owner.github.io/3dmodel-gen-system-"
 
@@ -294,3 +298,32 @@ def test_site_directory_verification_checks_urls_and_digests_without_network(tre
 def test_deployment_verification_refuses_a_placeholder_base():
     with pytest.raises(VerifyError):
         verify_catalog("https://asset-studio.example.invalid/api/v1", samples=1)
+
+
+def test_probe_mode_reports_the_http_evidence_per_url(served_site, capsys):
+    """`--probe` turns every fetched URL into an annotation: status, bytes, digest."""
+    site, base = served_site
+
+    assert main(["--base-url", base, "--allow-http", "--samples", "5",
+                 "--probe", "--report", str(site.parent / "report.json")]) == 0
+
+    printed = capsys.readouterr().out
+    notices = [line for line in printed.splitlines() if line.startswith("::notice title=Live HTTP")]
+    assert notices, printed
+    labels = {line.split("(", 1)[1].split(")")[0] for line in notices}
+    # The catalog, a per-asset manifest, the GLB and the glTF sidecars are all covered.
+    assert {"catalog", "manifest", "GLB"} <= labels
+    assert any("-> HTTP 200," in line for line in notices)
+    assert all("sha256=" in line for line in notices)
+    report = json.loads((site.parent / "report.json").read_text())
+    assert report["http"], "the report keeps the per-URL evidence"
+
+
+def test_probe_mode_stays_quiet_for_a_site_directory_check(tree, tmp_path, capsys):
+    """A pre-deploy check makes no HTTP requests, so it emits no HTTP annotations."""
+    built = build_catalog(tree / "manifests", tree / "processed", BASE)
+    site = tmp_path / "site"
+    write_site(built, site)
+
+    assert main(["--base-url", BASE, "--site-dir", str(site), "--probe"]) == 0
+    assert "::notice title=Live HTTP" not in capsys.readouterr().out

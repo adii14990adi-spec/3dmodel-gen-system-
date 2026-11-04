@@ -392,15 +392,27 @@ ANDROID = ROOT / ".github/workflows/android-build.yml"
 
 def test_pages_publishes_automatically_only_from_main():
     workflow = yaml.safe_load(PAGES.read_text())
-    guard = workflow["jobs"]["deploy"]["if"]
 
-    assert "github.ref == 'refs/heads/main'" in guard
-    # A branch under review may be published, but only by asking for it explicitly.
-    assert "workflow_dispatch" in guard and "inputs.deploy == true" in guard
+    # The environment-protected job is main-only; it can never be talked into deploying
+    # another ref, because the `github-pages` branch policy would reject it anyway.
+    assert workflow["jobs"]["deploy"]["if"].strip() == "github.ref == 'refs/heads/main'"
 
     inputs = workflow[True]["workflow_dispatch"]["inputs"]  # `on:` parses as True
     assert inputs["deploy"]["type"] == "boolean"
     assert inputs["deploy"]["default"] is False
+
+
+def test_review_branch_publication_is_manual_only():
+    workflow = yaml.safe_load(PAGES.read_text())
+    job = workflow["jobs"]["deploy-review"]
+    guard = job["if"]
+
+    assert job["needs"] == "build"
+    assert "inputs.deploy == true" in guard
+    assert "github.event_name == 'workflow_dispatch'" in guard
+    assert "github.ref != 'refs/heads/main'" in guard
+    steps = [step.get("name") for step in job["steps"]]
+    assert any(n and "Verify the deployed catalog over HTTPS" in n for n in steps)
 
 
 def test_pages_deploy_job_verifies_the_live_site_and_the_apk_url():

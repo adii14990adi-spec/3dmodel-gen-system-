@@ -196,8 +196,9 @@ jobs:
               failures += int(root.get("failures", 0)) + int(root.get("errors", 0))
               for case in root.iter("testcase"):
                   status = "skipped" if case.find("skipped") is not None else "passed"
-                  print(f"live {status}: {case.get('name')}")
-          print(f"live smoke: {total} test(s), {failures} failure(s)")
+                  print(f"::notice title=Live smoke::live {status}: {case.get('name')}")
+          print(f"::notice title=Live smoke summary::{total} test(s) against the deployed "
+                f"catalog, {failures} failure(s)")
           if total == 0:
               print("::error::the live smoke test produced no results")
               raise SystemExit(1)
