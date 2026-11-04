@@ -227,3 +227,56 @@ jobs:
           path: pages-verification.json
           if-no-files-found: warn
           retention-days: 14
+
+  # One-off publication of a branch that is under review.
+  #
+  # `main` deploys through the `github-pages` environment, whose branch policy only
+  # allows the default branch. Reviewing a change therefore cannot publish through that
+  # job at all: GitHub rejects the deployment before the first step runs. This job is the
+  # explicit, manual escape hatch (`deploy: true`) and it is never triggered by a push.
+  deploy-review:
+    name: publish this branch (manual)
+    needs: build
+    if: >-
+      github.event_name == 'workflow_dispatch' && inputs.deploy == true &&
+      github.ref != 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Publish the built artefact
+        id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Report the live URL
+        env:
+          PAGES_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          echo "::notice title=Published::$PAGES_URL now serves this branch's build"
+      - name: Cross-check the deployed URL against the URL compiled into the APK
+        env:
+          PAGES_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          set -euo pipefail
+          configured=$(grep -E '^assetStudio\.pagesBaseUrl=' android/gradle.properties | cut -d= -f2-)
+          deployed="${PAGES_URL%/}"
+          echo "deployed page_url : $deployed"
+          echo "APK catalog URL   : $configured"
+          test "$configured" = "$deployed" || {
+            echo "::error::the APK ships $configured but GitHub Pages published $deployed"
+            exit 1
+          }
+      - name: Verify the deployed catalog over HTTPS
+        env:
+          PAGES_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          python scripts/verify_pages_deployment.py \
+            --base-url "$PAGES_URL" --samples 5 --report pages-verification.json
+      - name: Upload the verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pages-verification-review-${{ github.run_id }}
+          path: pages-verification.json
+          if-no-files-found: warn
+          retention-days: 14
