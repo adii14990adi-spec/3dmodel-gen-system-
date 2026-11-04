@@ -153,72 +153,96 @@ def verify_catalog(base_url: str, *, samples: int = 2, timeout: float = 30.0,
         "content_type": headers.get("content-type", ""),
         "verified_assets": [],
         "verified_dependencies": 0,
+        "verified_roles": [],
         "bytes": 0,
         "http": probed,
     }
 
-    for kind in ("models", "animations"):
-        entries = catalog.get(kind) or []
-        if not entries:
-            continue
+    def verify_entry(kind: str, entry: dict[str, Any]) -> None:
+        check_url(entry.get("download_url", ""), base_url, what=f"{kind} download_url",
+                  allow_http=allow_http)
+        check_url(entry.get("manifest_url", ""), base_url, what=f"{kind} manifest_url",
+                  allow_http=allow_http)
+
+        payload, _ = read(entry["download_url"])
+        if len(payload) != int(entry.get("bytes") or -1):
+            raise VerifyError(f"{entry['id']}: served {len(payload)} bytes, "
+                              f"catalog says {entry.get('bytes')}")
+        digest = hashlib.sha256(payload).hexdigest()
+        if entry.get("sha256") and digest != entry["sha256"]:
+            raise VerifyError(f"{entry['id']}: served SHA-256 does not match the catalog")
+
+        manifest_raw, _ = read(entry["manifest_url"])
+        manifest = json.loads(manifest_raw.decode("utf-8"))
+        assets = manifest.get("assets") or {}
+        glb = assets.get("glb") or {}
+        if glb.get("url") != entry["download_url"]:
+            raise VerifyError(f"{entry['id']}: manifest glb URL disagrees with the catalog")
+        if glb.get("sha256") != digest:
+            raise VerifyError(f"{entry['id']}: manifest glb digest disagrees with the served bytes")
+
+        dependencies = assets.get("dependencies") or []
+        gltf = assets.get("gltf") or {}
+        if expect_gltf and entry.get("gltf_url"):
+            gltf_raw, _ = read(gltf["url"])
+            document = json.loads(gltf_raw.decode("utf-8"))
+            declared = {d.get("path", "").split("/")[-1] for d in dependencies}
+            for buffer in document.get("buffers") or []:
+                uri = buffer.get("uri")
+                if uri and not uri.startswith("data:") and uri.split("/")[-1] not in declared:
+                    raise VerifyError(f"{entry['id']}: glTF buffer {uri} has no dependency entry")
+            for image in document.get("images") or []:
+                uri = image.get("uri")
+                if uri and not uri.startswith("data:") and uri.split("/")[-1] not in declared:
+                    raise VerifyError(f"{entry['id']}: glTF image {uri} has no dependency entry")
+
+        for dependency in dependencies:
+            check_url(dependency.get("url", ""), base_url,
+                      what=f"{entry['id']} dependency", allow_http=allow_http)
+            body, _ = read(dependency["url"])
+            if len(body) != int(dependency.get("bytes") or -1):
+                raise VerifyError(f"{entry['id']}/{dependency['path']}: byte length mismatch")
+            if hashlib.sha256(body).hexdigest() != dependency.get("sha256"):
+                raise VerifyError(f"{entry['id']}/{dependency['path']}: digest mismatch")
+            result["verified_dependencies"] += 1
+            role = dependency.get("role", "")
+            if role and role not in result["verified_roles"]:
+                result["verified_roles"].append(role)
+
+        result["bytes"] += len(payload)
+        result["verified_assets"].append({
+            "id": entry.get("id"), "kind": entry.get("kind"),
+            "bytes": len(payload), "sha256": digest,
+            "gltf": bool(entry.get("gltf_url")),
+            "dependencies": len(dependencies),
+        })
+
+    def sample(kind: str, entries: list[dict[str, Any]]) -> None:
         # Prefer assets that actually publish glTF sidecars: that is the case a
         # single-file GLB download never exercises.
         ordered = sorted(entries, key=lambda item: 0 if item.get("dependencies") else 1)
         for entry in ordered[:samples]:
-            check_url(entry.get("download_url", ""), base_url, what=f"{kind} download_url",
-                      allow_http=allow_http)
-            check_url(entry.get("manifest_url", ""), base_url, what=f"{kind} manifest_url",
-                      allow_http=allow_http)
+            if entry.get("id") not in {asset["id"] for asset in result["verified_assets"]}:
+                verify_entry(kind, entry)
 
-            payload, _ = read(entry["download_url"])
-            if len(payload) != int(entry.get("bytes") or -1):
-                raise VerifyError(f"{entry['id']}: served {len(payload)} bytes, "
-                                  f"catalog says {entry.get('bytes')}")
-            digest = hashlib.sha256(payload).hexdigest()
-            if entry.get("sha256") and digest != entry["sha256"]:
-                raise VerifyError(f"{entry['id']}: served SHA-256 does not match the catalog")
+    for kind in ("models", "animations"):
+        entries = catalog.get(kind) or []
+        if entries:
+            sample(kind, entries)
 
-            manifest_raw, _ = read(entry["manifest_url"])
-            manifest = json.loads(manifest_raw.decode("utf-8"))
-            assets = manifest.get("assets") or {}
-            glb = assets.get("glb") or {}
-            if glb.get("url") != entry["download_url"]:
-                raise VerifyError(f"{entry['id']}: manifest glb URL disagrees with the catalog")
-            if glb.get("sha256") != digest:
-                raise VerifyError(f"{entry['id']}: manifest glb digest disagrees with the served bytes")
-
-            dependencies = assets.get("dependencies") or []
-            gltf = assets.get("gltf") or {}
-            if expect_gltf and entry.get("gltf_url"):
-                gltf_raw, _ = read(gltf["url"])
-                document = json.loads(gltf_raw.decode("utf-8"))
-                declared = {d.get("path", "").split("/")[-1] for d in dependencies}
-                for buffer in document.get("buffers") or []:
-                    uri = buffer.get("uri")
-                    if uri and not uri.startswith("data:") and uri.split("/")[-1] not in declared:
-                        raise VerifyError(f"{entry['id']}: glTF buffer {uri} has no dependency entry")
-                for image in document.get("images") or []:
-                    uri = image.get("uri")
-                    if uri and not uri.startswith("data:") and uri.split("/")[-1] not in declared:
-                        raise VerifyError(f"{entry['id']}: glTF image {uri} has no dependency entry")
-
-            for dependency in dependencies:
-                check_url(dependency.get("url", ""), base_url,
-                          what=f"{entry['id']} dependency", allow_http=allow_http)
-                body, _ = read(dependency["url"])
-                if len(body) != int(dependency.get("bytes") or -1):
-                    raise VerifyError(f"{entry['id']}/{dependency['path']}: byte length mismatch")
-                if hashlib.sha256(body).hexdigest() != dependency.get("sha256"):
-                    raise VerifyError(f"{entry['id']}/{dependency['path']}: digest mismatch")
-                result["verified_dependencies"] += 1
-
-            result["bytes"] += len(payload)
-            result["verified_assets"].append({
-                "id": entry.get("id"), "kind": entry.get("kind"),
-                "bytes": len(payload), "sha256": digest,
-                "gltf": bool(entry.get("gltf_url")),
-                "dependencies": len(dependencies),
-            })
+    # A PNG texture hides inside a bundle that the alphabetical sample may not reach;
+    # verify one such asset whenever the catalog publishes textures at all, so the run
+    # proves every role the site serves.
+    if "texture" not in result["verified_roles"]:
+        for kind in ("models", "animations"):
+            textured = next((entry for entry in catalog.get(kind) or []
+                             if any(dep.get("role") == "texture"
+                                    for dep in entry.get("dependencies") or [])), None)
+            if textured is None:
+                continue
+            if textured.get("id") not in {a["id"] for a in result["verified_assets"]}:
+                verify_entry(kind, textured)
+            break
 
     if not result["verified_assets"]:
         raise VerifyError("no asset could be verified")
@@ -281,7 +305,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"verified            {asset['kind']}/{asset['id']} {asset['bytes']} bytes "
               f"sha256={asset['sha256'][:12]}… gltf={asset['gltf']} "
               f"deps={asset['dependencies']}")
-    print(f"dependencies        {result['verified_dependencies']} sidecar(s) verified")
+    print(f"dependencies        {result['verified_dependencies']} sidecar(s) verified "
+          f"({', '.join(result['verified_roles']) or 'none'})")
     if args.probe:
         http = result.get("http") or {}
         kinds = {"glb": "GLB", "gltf": "glTF", "bin": "BIN", "png": "PNG"}

@@ -252,6 +252,8 @@ def test_deployment_verification_passes_on_a_consistent_site(served_site):
     assert result["counts"] == {"models": 1, "animations": 1}
     assert {entry["id"] for entry in result["verified_assets"]} == {"model_a", "anim_a"}
     assert result["verified_dependencies"] >= 2, "the .bin and the .png must be fetched"
+    # Every role the site serves is proven, including the PNG that hides inside a bundle.
+    assert {"buffer", "texture"} <= set(result["verified_roles"])
 
 
 def test_deployment_verification_catches_a_tampered_asset(served_site):
