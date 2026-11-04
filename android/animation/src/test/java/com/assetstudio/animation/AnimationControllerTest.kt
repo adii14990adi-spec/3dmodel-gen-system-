@@ -6,6 +6,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** JVM tests for the transport. No Android/Filament dependency: `apply` is a fake. */
+
+/**
+ * JUnit 4 only exposes double-based delta overloads, and Kotlin does not widen Float to Double
+ * implicitly, so float comparisons go through this helper instead of assertEquals.
+ */
+private fun assertClose(expected: Float, actual: Float, tolerance: Float = 1e-4f) =
+    org.junit.Assert.assertEquals(expected.toDouble(), actual.toDouble(), tolerance.toDouble())
+
 class AnimationControllerTest {
 
     private class Recorder {
@@ -27,7 +35,7 @@ class AnimationControllerTest {
         val s = c.state.value
         assertEquals(2, s.clipCount)
         assertEquals(listOf("clip0", "clip1"), s.clipNames)
-        assertEquals(1.5f, s.duration, 0.0001f)
+        assertClose(1.5f, s.duration)
         assertTrue(s.enabled)
         assertTrue(s.message.contains("2 clip"))
         assertEquals(0 to 0f, rec.last())
@@ -41,7 +49,7 @@ class AnimationControllerTest {
         c.tick(100_000_000L) // 0.1 s
         c.tick(100_000_000L)
         assertEquals(2, rec.calls.size)
-        assertEquals(0.2f, c.state.value.currentTime, 0.0001f)
+        assertClose(0.2f, c.state.value.currentTime)
         assertTrue(rec.calls[0].second < rec.calls[1].second)
         assertEquals(0, rec.calls[1].first)
     }
@@ -57,7 +65,7 @@ class AnimationControllerTest {
         c.play()
         c.tick(0L)                   // zero delta
         c.tick(-10L)                 // negative delta
-        assertEquals(0f, c.state.value.currentTime, 0.0001f)
+        assertClose(0f, c.state.value.currentTime)
         assertTrue(rec.calls.isEmpty())
     }
 
@@ -79,7 +87,7 @@ class AnimationControllerTest {
         rec.calls.clear()
         c.tick(900_000_000L)
         assertFalse(c.state.value.playing)
-        assertEquals(0.5f, c.state.value.currentTime, 0.0001f)
+        assertClose(0.5f, c.state.value.currentTime)
         assertEquals(0 to 0.5f, rec.last())
     }
 
@@ -87,15 +95,15 @@ class AnimationControllerTest {
     fun `seek clamps into the clip and stop rewinds`() {
         val (c, rec) = controller(2.0f)
         c.seek(1.25f)
-        assertEquals(1.25f, c.state.value.currentTime, 0.0001f)
+        assertClose(1.25f, c.state.value.currentTime)
         c.seek(99f)
-        assertEquals(2.0f, c.state.value.currentTime, 0.0001f)
+        assertClose(2.0f, c.state.value.currentTime)
         c.seek(-5f)
-        assertEquals(0f, c.state.value.currentTime, 0.0001f)
+        assertClose(0f, c.state.value.currentTime)
         c.seek(1f)
         rec.calls.clear()
         c.stop()
-        assertEquals(0f, c.state.value.currentTime, 0.0001f)
+        assertClose(0f, c.state.value.currentTime)
         assertEquals(0 to 0f, rec.last())
     }
 
@@ -104,11 +112,11 @@ class AnimationControllerTest {
         val (c, rec) = controller(1.0f, 3.0f)
         c.selectClip(1, 3.0f)
         assertEquals(1, c.state.value.clipIndex)
-        assertEquals(3.0f, c.state.value.duration, 0.0001f)
+        assertClose(3.0f, c.state.value.duration)
         assertEquals(1 to 0f, rec.last())
         c.selectClip(5, 9f)
         assertEquals(1, c.state.value.clipIndex)
-        assertEquals(3.0f, c.state.value.duration, 0.0001f)
+        assertClose(3.0f, c.state.value.duration)
     }
 
     @Test
@@ -117,9 +125,9 @@ class AnimationControllerTest {
         c.setSpeed(2.0f)
         c.play()
         c.tick(500_000_000L)
-        assertEquals(1.0f, c.state.value.currentTime, 0.0001f)
+        assertClose(1.0f, c.state.value.currentTime)
         c.setSpeed(4f) // unsupported speed is rejected
-        assertEquals(2.0f, c.state.value.speed, 0.0001f)
+        assertClose(2.0f, c.state.value.speed)
     }
 
     @Test
@@ -158,7 +166,7 @@ class AnimationControllerTest {
     fun `progress reflects the current time`() {
         val (c, _) = controller(4f)
         c.seek(1f)
-        assertEquals(0.25f, c.state.value.progress, 0.0001f)
+        assertClose(0.25f, c.state.value.progress)
         assertEquals("clip0", c.state.value.clipName)
     }
 }

@@ -5,6 +5,14 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+
+/**
+ * JUnit 4 only exposes double-based delta overloads, and Kotlin does not widen Float to Double
+ * implicitly, so float comparisons go through this helper instead of assertEquals.
+ */
+private fun assertClose(expected: Float, actual: Float, tolerance: Float = 1e-4f) =
+    org.junit.Assert.assertEquals(expected.toDouble(), actual.toDouble(), tolerance.toDouble())
+
 class PlaybackValidatorTest {
 
     private class FakeRenderer(
@@ -39,7 +47,7 @@ class PlaybackValidatorTest {
         assertEquals(18, renderer.applied.size) // 3 probes x 6 clips
         val attack = report.categories.first { it.category == PlaybackCategory.ATTACK }
         assertEquals("Retarget_attack", attack.probe!!.clipName)
-        assertEquals(1.0f, attack.probe!!.durationSeconds, 0.0001f)
+        assertClose(1.0f, attack.probe!!.durationSeconds)
         assertEquals(ProbeStatus.PASS, attack.status)
     }
 
