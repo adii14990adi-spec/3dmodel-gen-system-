@@ -7,11 +7,12 @@ import kotlinx.coroutines.flow.asStateFlow
 /**
  * Ties the playback state machine to a concrete renderer.
  *
- * The session keeps the per-category evidence of everything validated *in this
- * process lifetime*, so the player screen can show "validated on this device" for
- * idle/walk/run/jump/attack/death as the user loads each clip. Nothing is
- * remembered across launches and nothing is inferred from the library metadata:
- * a category is only marked validated after the animator really posed the clip.
+ * The session keeps the per-category evidence of everything validated since the
+ * current asset was attached, so the player screen can show "validated on this
+ * device" for idle/walk/run/jump/attack/death as the user loads each clip. Nothing
+ * is remembered across launches, nothing survives [detach], and nothing is inferred
+ * from the library metadata: a category is only marked validated after the animator
+ * really posed the clip.
  */
 class PlaybackSession(private val controller: AnimationController) {
 
@@ -47,9 +48,15 @@ class PlaybackSession(private val controller: AnimationController) {
         _report.value = null
     }
 
+    /**
+     * Unload the current asset. The evidence is cleared together with the renderer:
+     * with no asset loaded the card must not keep claiming "validated on this device"
+     * for clips the process can no longer pose.
+     */
     fun detach() {
         attach(NoPlaybackRenderer, "")
         _report.value = null
+        _validated.value = emptyMap()
     }
 
     /** Validate the currently loaded asset and merge the evidence into the session. */

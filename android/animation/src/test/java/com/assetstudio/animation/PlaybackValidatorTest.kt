@@ -63,8 +63,11 @@ class PlaybackValidatorTest {
     @Test
     fun `zero duration fails instead of showing a frozen pose`() {
         val report = PlaybackValidator.validate("x.glb", FakeRenderer(listOf("walk"), listOf(0f)))
-        assertEquals(ProbeStatus.FAIL, report.categories.first().status)
-        assertTrue(report.categories.first().probe!!.message.contains("zero duration"))
+        // categories are reported in enum order, so the walk outcome has to be picked by name
+        val walk = report.categories.first { it.category == PlaybackCategory.WALK }
+        assertEquals(1, report.failed)
+        assertEquals(ProbeStatus.FAIL, walk.status)
+        assertTrue(walk.probe!!.message.contains("zero duration"))
     }
 
     @Test
