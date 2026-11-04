@@ -55,25 +55,47 @@ jobs:
         run: |
           python scripts/build_pages_site.py --output site --base-url "$PAGES_BASE_URL"
       - name: Validate the emitted glTF + BIN + PNG bundles
-        # Proves the multi-file form works: the Khronos validator resolves scene.bin
-        # and every texture relative to the published .gltf.
+        # The Khronos validator resolves scene.bin and every texture relative to the
+        # published .gltf, so this is the proof that the multi-file form is servable.
+        # Assets the pipeline already marked non-PASS are deliberate fixtures (for
+        # example `model_missing_texture`); their validator output is reported, not
+        # treated as a regression. A PASS asset must validate clean.
         run: |
           python - <<'PY'
           import json, pathlib, sys
           sys.path.insert(0, ".")
           from processing.validate import validate_glb
-          gltfs = sorted(pathlib.Path("site/assets").glob("*/**/scene.gltf"))
-          if not gltfs:
-              print("ERROR: the site published no glTF bundles"); raise SystemExit(1)
-          sample = gltfs[:5] + gltfs[-5:] if len(gltfs) > 10 else gltfs
-          errors = 0
-          for path in sample:
-              for check in validate_glb(path):
-                  if check["severity"] == "ERROR":
-                      errors += 1
-                      print(f"::error file={path}::{check['code']}: {check['description']}")
-          print(f"validated {len(sample)} of {len(gltfs)} glTF bundle(s); {errors} error(s)")
-          raise SystemExit(1 if errors else 0)
+
+          site = pathlib.Path("site")
+          catalog = json.loads((site / "catalog/index.json").read_text())
+          prefix = catalog["base_url"].rstrip("/") + "/"
+          failures, known, checked = [], [], 0
+          for kind in ("models", "animations"):
+              for entry in catalog[kind]:
+                  url = entry.get("gltf_url")
+                  if not url:
+                      continue
+                  gltf = site / url.split(prefix, 1)[-1]
+                  errors = [c for c in validate_glb(gltf) if c["severity"] == "ERROR"]
+                  checked += 1
+                  if not errors:
+                      continue
+                  if entry.get("validation_status") == "PASS":
+                      failures.append((entry["id"], errors))
+                  else:
+                      known.append((entry["id"], entry.get("validation_status"),
+                                    sorted({c["code"] for c in errors})))
+          for asset_id, errors in failures:
+              for check in errors:
+                  print(f"::error title={asset_id}::{check['code']}: {check['description']}")
+          for asset_id, status, codes in known:
+              print(f"::notice title={asset_id}::known {status} fixture; validator reports {', '.join(codes)}")
+          print(f"validated {checked} glTF bundle(s): {len(failures)} unexpected failure(s), "
+                f"{len(known)} known-invalid fixture(s)")
+          if checked == 0:
+              print("::error::the site published no glTF bundles")
+              raise SystemExit(1)
+          raise SystemExit(1 if failures else 0)
           PY
       - name: Ensure the app default matches the published base URL
         # android/gradle.properties carries the URL that ships inside the APK; a

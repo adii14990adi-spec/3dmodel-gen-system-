@@ -55,9 +55,13 @@ jobs:
           keyAlias=$SIGNING_KEY_ALIAS
           keyPassword=$SIGNING_KEY_PASSWORD
           EOF
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
       - name: Verify Filament 1.75.1 artifacts and Animator API
         # Proves the versions we compile against are the resolved ones, and that the gltfio
-        # Animator methods the renderer calls actually exist in the 1.75.1 AAR.
+        # Animator methods the renderer calls actually exist in the 1.75.1 AAR. It runs after
+        # assembleDebug because only a real compile downloads the AARs into the cache.
         working-directory: android
         shell: bash
         run: |
@@ -77,9 +81,6 @@ jobs:
             grep -q "$sym" /tmp/animator-api.txt || { echo "::error::Animator#$sym missing from gltfio-android 1.75.1"; exit 1; }
           done
           echo "::notice title=Filament 1.75.1::resolved AAR verified; Animator exposes applyAnimation, updateBoneMatrices, getAnimationCount, getAnimationDuration, getAnimationName"
-      - name: Build debug APK
-        working-directory: android
-        run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
       - name: Playback transport unit tests (:animation)
         # JVM tests for play/pause/stop/loop/seek and the playback validator.
         id: animation_tests
