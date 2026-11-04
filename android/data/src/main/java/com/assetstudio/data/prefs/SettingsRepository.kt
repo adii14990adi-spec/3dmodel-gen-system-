@@ -11,10 +11,15 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore("asset_studio_settings")
 
-class SettingsRepository(private val context: Context) {
+class SettingsRepository(
+    private val context: Context,
+    private val defaultCatalogBaseUrl: String
+) {
     companion object {
-        val API_BASE_URL = stringPreferencesKey("api_base_url")
-        val API_KEY = stringPreferencesKey("api_key")
+        /** GitHub Pages catalog root; overridable for forks and local previews. */
+        val CATALOG_BASE_URL = stringPreferencesKey("catalog_base_url")
+        /** Legacy keys, read once for migration; never used to contact a server. */
+        val LEGACY_API_BASE_URL = stringPreferencesKey("api_base_url")
         val QUALITY = stringPreferencesKey("quality")
         val RENDER_MODE = stringPreferencesKey("render_mode")
         val SHOW_GRID = booleanPreferencesKey("show_grid")
@@ -35,8 +40,9 @@ class SettingsRepository(private val context: Context) {
 
     val settings: Flow<StudioSettings> = context.dataStore.data.map { p ->
         StudioSettings(
-            apiBaseUrl = p[API_BASE_URL] ?: "https://asset-studio.example.invalid/api/v1/",
-            apiKey = p[API_KEY] ?: "",
+            // Only the Pages base URL is ever used; the legacy key is migrated once.
+            apiBaseUrl = p[CATALOG_BASE_URL] ?: defaultCatalogBaseUrl,
+            apiKey = "", // the static catalog is public: there is no API key any more
             quality = runCatching { Quality.valueOf(p[QUALITY] ?: "BALANCED") }.getOrDefault(Quality.BALANCED),
             renderMode = runCatching { RenderMode.valueOf(p[RENDER_MODE] ?: "PBR") }.getOrDefault(RenderMode.PBR),
             showGrid = p[SHOW_GRID] ?: true, showAxes = p[SHOW_AXES] ?: true,

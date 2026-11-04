@@ -9,6 +9,10 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+// Single source of truth for the static hosting base URL: android/gradle.properties.
+val pagesBaseUrl: String = (project.findProperty("assetStudio.pagesBaseUrl") as String?)
+    ?: error("assetStudio.pagesBaseUrl is missing from android/gradle.properties")
+
 val keystorePropertiesFile = rootProject.file("keystore.properties")
 val keystoreProperties = Properties().apply {
     if (keystorePropertiesFile.isFile) load(FileInputStream(keystorePropertiesFile))
@@ -25,7 +29,8 @@ android {
         versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
-        buildConfigField("String", "DEFAULT_API_BASE_URL", "\"https://asset-studio.example.invalid/api/v1/\"")
+        // GitHub Pages static catalog. No API server is contacted anywhere in the app.
+        buildConfigField("String", "CATALOG_BASE_URL", "\"$pagesBaseUrl\"")
     }
     signingConfigs {
         if (keystorePropertiesFile.isFile) {
@@ -76,6 +81,9 @@ dependencies {
     implementation(libs.filament.utils)
     implementation(libs.kotlinx.serialization)
     implementation(libs.kotlinx.coroutines)
+    // The app module owns the HTTP client that the static catalog uses (AppContainer).
+    implementation(libs.okhttp)
+    implementation(libs.okhttp.logging)
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)

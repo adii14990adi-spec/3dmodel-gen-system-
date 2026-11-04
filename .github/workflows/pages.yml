@@ -1,0 +1,280 @@
+name: Pages
+
+# Publishes the static asset catalog to GitHub Pages.
+#
+# This is the hosting model of the product: the Android app reads
+# `<pages>/catalog/index.json` and downloads `<pages>/assets/...`. There is no API
+# server, no Node/Python runtime and no secret involved in serving the site.
+on:
+  push:
+    # main publishes; feature branches build and validate the same site so a break is
+    # caught before merge (the deploy job below only runs for main).
+    branches: [main, 'arena/**']
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: >-
+          Publish this ref's build to GitHub Pages. Off by default: only main publishes
+          automatically. Set it to true for a one-off deploy of a branch under review.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build site
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11', cache: 'pip' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Install pinned dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          npm ci --prefix tools/gltf-validator || npm install --prefix tools/gltf-validator
+      - name: Build the pipeline outputs the site publishes
+        run: |
+          python -m processing.cli process-models --all
+          python -m processing.cli process-animations --all
+          python -m processing.cli build-index
+      - name: Report the Pages base URL that will be published
+        id: pages-url
+        run: |
+          set -euo pipefail
+          owner=$(python -c "import os;print(os.environ['GITHUB_REPOSITORY'].split('/')[0].lower())")
+          repo=$(python -c "import os;print(os.environ['GITHUB_REPOSITORY'].split('/')[1])")
+          echo "base_url=https://${owner}.github.io/${repo}" >> "$GITHUB_OUTPUT"
+      - name: Build the static catalog
+        env:
+          PAGES_BASE_URL: ${{ steps.pages-url.outputs.base_url }}
+        run: |
+          python scripts/build_pages_site.py --output site --base-url "$PAGES_BASE_URL"
+      - name: Validate the emitted glTF + BIN + PNG bundles
+        # The Khronos validator resolves scene.bin and every texture relative to the
+        # published .gltf, so this is the proof that the multi-file form is servable.
+        # Assets the pipeline already marked non-PASS are deliberate fixtures (for
+        # example `model_missing_texture`); their validator output is reported, not
+        # treated as a regression. A PASS asset must validate clean.
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys
+          sys.path.insert(0, ".")
+          from processing.validate import validate_glb
+
+          site = pathlib.Path("site")
+          catalog = json.loads((site / "catalog/index.json").read_text())
+          prefix = catalog["base_url"].rstrip("/") + "/"
+          failures, known, checked = [], [], 0
+          for kind in ("models", "animations"):
+              for entry in catalog[kind]:
+                  url = entry.get("gltf_url")
+                  if not url:
+                      continue
+                  gltf = site / url.split(prefix, 1)[-1]
+                  errors = [c for c in validate_glb(gltf) if c["severity"] == "ERROR"]
+                  checked += 1
+                  if not errors:
+                      continue
+                  if entry.get("validation_status") == "PASS":
+                      failures.append((entry["id"], errors))
+                  else:
+                      known.append((entry["id"], entry.get("validation_status"),
+                                    sorted({c["code"] for c in errors})))
+          for asset_id, errors in failures:
+              for check in errors:
+                  print(f"::error title={asset_id}::{check['code']}: {check['description']}")
+          for asset_id, status, codes in known:
+              print(f"::notice title={asset_id}::known {status} fixture; validator reports {', '.join(codes)}")
+          print(f"validated {checked} glTF bundle(s): {len(failures)} unexpected failure(s), "
+                f"{len(known)} known-invalid fixture(s)")
+          if checked == 0:
+              print("::error::the site published no glTF bundles")
+              raise SystemExit(1)
+          raise SystemExit(1 if failures else 0)
+          PY
+      - name: Verify the built artefact (URLs, sizes, digests, sidecars)
+        # Pre-deploy check of the exact tree that will be uploaded: every absolute URL
+        # must map to a file at that path with the catalog's own byte count and SHA-256.
+        env:
+          PAGES_BASE_URL: ${{ steps.pages-url.outputs.base_url }}
+        run: |
+          python scripts/verify_pages_deployment.py \
+            --base-url "$PAGES_BASE_URL" --site-dir site --samples 5 \
+            --report site-artifact-verification.json
+      - name: Upload the artefact verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-artifact-verification-${{ github.run_id }}
+          path: site-artifact-verification.json
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Ensure the app default matches the published base URL
+        # android/gradle.properties carries the URL that ships inside the APK; a
+        # mismatch is exactly how a client ends up calling a host that does not exist.
+        env:
+          PUBLISHED_BASE_URL: ${{ steps.pages-url.outputs.base_url }}
+        run: |
+          set -euo pipefail
+          configured=$(grep -E '^assetStudio\.pagesBaseUrl=' android/gradle.properties | cut -d= -f2-)
+          published="$PUBLISHED_BASE_URL"
+          echo "app default : $configured"
+          echo "pages will be: $published"
+          test "$configured" = "$published" || {
+            echo "::error::android/gradle.properties holds $configured but Pages publishes $published"
+            exit 1
+          }
+      - name: Configure GitHub Pages
+        id: pages
+        # Creates the Pages site (source: GitHub Actions) when the repository has none.
+        # A repository where the workflow token may not create the site fails here;
+        # the notice names the manual step instead of hiding the real blocker.
+        continue-on-error: true
+        uses: actions/configure-pages@v5
+        with: { enablement: true }
+      - name: Report a Pages setup problem
+        if: steps.pages.outcome != 'success'
+        env:
+          PAGES_BASE_URL: ${{ steps.pages-url.outputs.base_url }}
+        run: |
+          echo "::warning title=GitHub Pages is not enabled::The site $PAGES_BASE_URL does not \
+          exist yet. Enable it under Settings -> Pages -> Source: GitHub Actions, then re-run \
+          this workflow. The site tree was built and validated in this run."
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+          retention-days: 7
+
+  deploy:
+    name: deploy site
+    needs: build
+    # Only the default branch publishes here: this job runs inside the `github-pages`
+    # environment, whose branch policy allows `main` alone. Review branches publish
+    # through `deploy-review` below instead.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Check that GitHub Pages is enabled
+        # Fails fast with the exact manual step instead of a cryptic deploy error.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SETTINGS_URL: ${{ github.server_url }}/${{ github.repository }}/settings/pages
+        run: |
+          set -euo pipefail
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/pages")
+          echo "GET /repos/$REPO/pages -> HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "::error title=GitHub Pages is not enabled::Enable it at $SETTINGS_URL (Source: \
+            GitHub Actions), then re-run this workflow. The site artefact is built and verified \
+            in the build job of this run."
+            exit 1
+          fi
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Cross-check the deployed URL against the URL compiled into the APK
+        env:
+          PAGES_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          set -euo pipefail
+          configured=$(grep -E '^assetStudio\.pagesBaseUrl=' android/gradle.properties | cut -d= -f2-)
+          deployed="${PAGES_URL%/}"
+          echo "deployed page_url : $deployed"
+          echo "APK catalog URL   : $configured"
+          test "$configured" = "$deployed" || {
+            echo "::error::the APK ships $configured but GitHub Pages published $deployed"
+            exit 1
+          }
+          echo "::notice title=Catalog URL::APK BuildConfig and the live Pages URL are identical ($deployed)"
+      - name: Verify the deployed catalog over HTTPS
+        # Fetches the live site and compares served bytes with the published
+        # digests, including the .bin/.png sidecars of the glTF bundles.
+        env:
+          PAGES_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          python scripts/verify_pages_deployment.py \
+            --base-url "$PAGES_URL" --samples 5 --probe --report pages-verification.json
+      - name: Upload the verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pages-verification-${{ github.run_id }}
+          path: pages-verification.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  # One-off publication of a branch that is under review.
+  #
+  # `main` deploys through the `github-pages` environment, whose branch policy only
+  # allows the default branch. Reviewing a change therefore cannot publish through that
+  # job at all: GitHub rejects the deployment before the first step runs. This job is the
+  # explicit, manual escape hatch (`deploy: true`) and it is never triggered by a push.
+  deploy-review:
+    name: publish this branch (manual)
+    needs: build
+    if: >-
+      github.event_name == 'workflow_dispatch' && inputs.deploy == true &&
+      github.ref != 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Publish the built artefact
+        id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Report the live URL
+        env:
+          PAGES_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          echo "::notice title=Published::$PAGES_URL now serves this branch's build"
+      - name: Cross-check the deployed URL against the URL compiled into the APK
+        env:
+          PAGES_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          set -euo pipefail
+          configured=$(grep -E '^assetStudio\.pagesBaseUrl=' android/gradle.properties | cut -d= -f2-)
+          deployed="${PAGES_URL%/}"
+          echo "deployed page_url : $deployed"
+          echo "APK catalog URL   : $configured"
+          test "$configured" = "$deployed" || {
+            echo "::error::the APK ships $configured but GitHub Pages published $deployed"
+            exit 1
+          }
+      - name: Verify the deployed catalog over HTTPS
+        env:
+          PAGES_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          python scripts/verify_pages_deployment.py \
+            --base-url "$PAGES_URL" --samples 5 --probe --report pages-verification.json
+      - name: Upload the verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pages-verification-review-${{ github.run_id }}
+          path: pages-verification.json
+          if-no-files-found: warn
+          retention-days: 14

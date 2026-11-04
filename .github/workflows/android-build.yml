@@ -55,9 +55,77 @@ jobs:
           keyAlias=$SIGNING_KEY_ALIAS
           keyPassword=$SIGNING_KEY_PASSWORD
           EOF
+      - name: Build debug APK
+        id: apk
+        continue-on-error: true
+        working-directory: android
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew :app:assembleDebug --stacktrace --no-daemon 2>&1 | tee /tmp/apk-build.log
+      - name: Report Gradle build problems
+        # Runner logs cannot always be fetched from outside CI; the compiler errors are
+        # surfaced as check-run annotations as well.
+        if: steps.apk.outcome == 'failure'
+        shell: bash
+        run: |
+          set +e
+          { grep -E "^e: |error: |^FAILURE: |> Task .*FAILED|Execution failed|Could not resolve" \
+              /tmp/apk-build.log || true; } | head -12 | while IFS= read -r line; do
+            echo "::error::${line}"
+          done
+          exit 1
+      - name: Cross-check the catalog URL compiled into the debug APK
+        # The failure this guards against is a placeholder host baked into the APK, so
+        # the check inspects the shipped DEX rather than only the source. The generic
+        # "example.invalid" literal does appear once on purpose: Catalog.kt keeps the
+        # blocklist that rejects placeholder hosts at runtime.
+        run: |
+          python3 - <<'PY'
+          import pathlib, sys, zipfile
+          sys.path.insert(0, ".")
+          from scripts.build_pages_site import pages_base_url
+
+          apk = next(pathlib.Path("android/app/build/outputs/apk/debug").glob("*.apk"))
+          configured = ""
+          for line in pathlib.Path("android/gradle.properties").read_text().splitlines():
+              if line.startswith("assetStudio.pagesBaseUrl="):
+                  configured = line.split("=", 1)[1].strip()
+          expected = pages_base_url(allow_http=False)
+          with zipfile.ZipFile(apk) as archive:
+              dex_names = sorted(n for n in archive.namelist()
+                                 if n.startswith("classes") and n.endswith(".dex"))
+              blob = b"".join(archive.read(name) for name in dex_names)
+          pages_hits = blob.count(configured.encode())
+          bad_host_hits = blob.count(b"asset-studio.example.invalid")
+          blocklist_hits = blob.count(b"example.invalid")
+          print(f"apk                    {apk.name} ({apk.stat().st_size} bytes)")
+          print(f"dex entries            {len(dex_names)}: {', '.join(dex_names)}")
+          print(f"gradle default         {configured}")
+          print(f"pages base url         {expected}")
+          print(f"catalog url in dex     {pages_hits} occurrence(s)")
+          print(f"bad host in dex        {bad_host_hits} occurrence(s)")
+          print(f"blocklist literal      {blocklist_hits} occurrence(s) (expected 1, runtime guard)")
+          problems = []
+          if not configured:
+              problems.append("android/gradle.properties does not define assetStudio.pagesBaseUrl")
+          elif configured != expected:
+              problems.append(f"gradle.properties has {configured}, Pages publishes {expected}")
+          if pages_hits < 1:
+              problems.append("the APK does not contain the Pages catalog URL")
+          if bad_host_hits:
+              problems.append("the APK still resolves the placeholder host asset-studio.example.invalid")
+          for problem in problems:
+              print(f"::error::{problem}")
+          if problems:
+              raise SystemExit(1)
+          print(f"::notice title=APK catalog URL::BuildConfig.CATALOG_BASE_URL = {configured}, "
+                f"shipped in the DEX, zero placeholder hosts")
+          PY
       - name: Verify Filament 1.75.1 artifacts and Animator API
         # Proves the versions we compile against are the resolved ones, and that the gltfio
-        # Animator methods the renderer calls actually exist in the 1.75.1 AAR.
+        # Animator methods the renderer calls actually exist in the 1.75.1 AAR. It runs after
+        # assembleDebug because only a real compile downloads the AARs into the cache.
         working-directory: android
         shell: bash
         run: |
@@ -77,9 +145,6 @@ jobs:
             grep -q "$sym" /tmp/animator-api.txt || { echo "::error::Animator#$sym missing from gltfio-android 1.75.1"; exit 1; }
           done
           echo "::notice title=Filament 1.75.1::resolved AAR verified; Animator exposes applyAnimation, updateBoneMatrices, getAnimationCount, getAnimationDuration, getAnimationName"
-      - name: Build debug APK
-        working-directory: android
-        run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
       - name: Playback transport unit tests (:animation)
         # JVM tests for play/pause/stop/loop/seek and the playback validator.
         id: animation_tests
@@ -138,6 +203,49 @@ jobs:
             done
           done
           exit $status
+      - name: Live catalog smoke test against the deployed Pages site
+        # Runs the real client code (CatalogClient + AssetDownloader) against the live
+        # site the APK ships in BuildConfig.CATALOG_BASE_URL. Skipped with a warning when
+        # the site is not reachable, so a Pages outage cannot block an APK build.
+        working-directory: android
+        env:
+          ASSET_STUDIO_LIVE_BASE_URL: https://adii14990adi-spec.github.io/3dmodel-gen-system-
+        run: |
+          set -uo pipefail
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
+            "$ASSET_STUDIO_LIVE_BASE_URL/catalog/index.json" || true)
+          echo "GET $ASSET_STUDIO_LIVE_BASE_URL/catalog/index.json -> HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "::warning title=Live catalog unavailable::The deployed catalog returned \
+            HTTP $code, so the live smoke test is skipped in this run."
+            exit 0
+          fi
+          ./gradlew :asset-library:testDebugUnitTest --tests '*LiveCatalogSmokeTest*' \
+            --no-daemon --stacktrace 2>&1 | tee /tmp/live-smoke.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            grep -E "^e: |error: |^FAILURE: |> Task .*FAILED|Execution failed" /tmp/live-smoke.log \
+              | head -20 | while read -r line; do echo "::error::$line"; done
+            exit "$status"
+          fi
+          python3 - <<'PY'
+          import glob, pathlib, xml.etree.ElementTree as ET
+          total = failures = 0
+          for report in glob.glob("asset-library/build/test-results/**/TEST-*LiveCatalogSmokeTest.xml",
+                                  recursive=True):
+              root = ET.parse(report).getroot()
+              total += int(root.get("tests", 0))
+              failures += int(root.get("failures", 0)) + int(root.get("errors", 0))
+              for case in root.iter("testcase"):
+                  status = "skipped" if case.find("skipped") is not None else "passed"
+                  print(f"::notice title=Live smoke::live {status}: {case.get('name')}")
+          print(f"::notice title=Live smoke summary::{total} test(s) against the deployed "
+                f"catalog, {failures} failure(s)")
+          if total == 0:
+              print("::error::the live smoke test produced no results")
+              raise SystemExit(1)
+          raise SystemExit(1 if failures else 0)
+          PY
       - name: Build release APK
         if: ${{ inputs.release }}
         working-directory: android
