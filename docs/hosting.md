@@ -147,24 +147,47 @@ because every published file is public.
 
 ```bash
 # local smoke test of the builder + verifier, no network
-python -m pytest tests/unit/test_pages_site.py -q          # 14 tests
+python -m pytest tests/unit/test_pages_site.py -q          # 17 tests
 
 # against the live site (fails on any digest/size mismatch)
 python scripts/verify_pages_deployment.py \
-  --base-url https://adii14990adi-spec.github.io/3dmodel-gen-system- --samples 3
+  --base-url https://adii14990adi-spec.github.io/3dmodel-gen-system- --samples 5 --probe
 ```
 
 `verify_pages_deployment.py` fetches `catalog/index.json`, the sampled manifests, the
 GLBs and **every `.bin`/`.png` sidecar**, and compares each response with the digest
 the catalog advertises. It also refuses `http://`, loopback and placeholder hosts.
-`.github/workflows/pages.yml` runs exactly this against
-`steps.deployment.outputs.page_url` after deploying, so a broken deploy fails CI.
+When the sampled assets carry no texture it fetches one asset that does, so the PNG
+role is covered whenever the catalog publishes one.
+
+Two modes, both used by CI:
+
+| mode | command | what it proves |
+| --- | --- | --- |
+| artefact | `--site-dir site` | every absolute URL maps to a file with the published size and SHA-256, **before** anything is uploaded |
+| live | (default) `--base-url …  --probe` | the same bytes are served over HTTPS; `--probe` turns each role into an annotation (status, bytes, content type, digest) |
+
+### Publication rules
+
+* `main` publishes automatically through the `deploy` job, which runs inside the
+  `github-pages` environment. GitHub's branch policy for that environment allows
+  `main` only, so no other ref can publish there — GitHub rejects the job before its
+  first step runs.
+* A branch under review is published **manually**: `Actions → Pages → Run workflow`
+  with `deploy: true`. That path uses the `deploy-review` job (no environment gate),
+  then re-runs the same live cross-checks. Push events never reach it.
+* The Android workflow exports the same URL as `ASSET_STUDIO_LIVE_BASE_URL` and runs
+  `LiveCatalogSmokeTest`, so the client code itself (`CatalogClient` + `AssetDownloader`)
+  is exercised against the deployed site: listing, manifest, GLB digest, `.bin`/PNG
+  sidecars and the on-disk cache while offline. A Pages outage warns and skips instead
+  of failing the APK build.
 
 ## Limitations (stated plainly)
 
-* **Pages must be enabled** for the repository (admin action, or the workflow's
-  `enablement: true` request). Until then the catalog URL returns 404 and the app
-  shows "Catalog unreachable at …".
+* **Pages must be enabled** for the repository with *Source: GitHub Actions*. The
+  workflow token cannot enable it (the REST call needs `pages:write`/admin), so this
+  stays a one-time manual step; the deploy job reports it as an error naming
+  `Settings → Pages` instead of failing obscurely.
 * **The viewport renders GLB.** The glTF bundle is published, downloaded and
   Khronos-validated, but the Filament viewport opens the self-contained GLB; a
   multi-file `.gltf` import is stored and inspectable but is not rendered.
