@@ -162,6 +162,47 @@ jobs:
         run: |
           set -o pipefail
           ./gradlew testDebugUnitTest --stacktrace --no-daemon 2>&1 | tee /tmp/module-tests.log
+      - name: Report JVM unit test results
+        # Runner logs are not always fetchable from outside CI, so the pass/fail verdict and the
+        # per-module counts are surfaced as check-run annotations too.
+        if: always()
+        shell: bash
+        run: |
+          # the runner shell is `bash -e`, so the log greps below must not abort the step
+          set -uo pipefail
+          set +e
+          python3 - <<'PY'
+          import glob, re, xml.etree.ElementTree as ET
+          total = failures = errors = skipped = 0
+          rows = []
+          for f in sorted(glob.glob("android/*/build/test-results/testDebugUnitTest/*.xml")):
+              module = f.split("/")[1]
+              root = ET.parse(f).getroot()
+              t, fa, er, sk = (int(root.get(k, 0)) for k in ("tests", "failures", "errors", "skipped"))
+              total += t; failures += fa; errors += er; skipped += sk
+              rows.append(f"{module}: {t} tests, {fa} failures, {er} errors, {sk} skipped")
+              for case in root.iter("testcase"):
+                  for bad in list(case.iter("failure")) + list(case.iter("error")):
+                      msg = " / ".join((bad.get("message") or "").strip().splitlines()[:3]).replace("%", "%25")
+                      print(f"::error title={module} {case.get('classname')}.{case.get('name')}::{msg[:900]}")
+          summary = f"{total} run, {failures} failures, {errors} errors, {skipped} skipped"
+          print(f"JVM unit tests: {summary}")
+          for row in rows:
+              print(f"  {row}")
+          print(f"::notice title=Kotlin JVM unit tests::{summary} | " + " | ".join(rows))
+          if total == 0:
+              print("::error::No JVM unit test results were produced")
+              raise SystemExit(1)
+          raise SystemExit(1 if (failures or errors) else 0)
+          PY
+          status=$?
+          for log in /tmp/animation-tests.log /tmp/module-tests.log; do
+            [ -f "$log" ] || continue
+            { grep -E "^(e: |> Task .*FAILED)|FAILED$|error: " "$log" || true; } | head -10 | while IFS= read -r line; do
+              echo "::error::${line//$'\r'/}"
+            done
+          done
+          exit $status
       - name: Live catalog smoke test against the deployed Pages site
         # Runs the real client code (CatalogClient + AssetDownloader) against the live
         # site the APK ships in BuildConfig.CATALOG_BASE_URL. Skipped with a warning when
@@ -205,47 +246,6 @@ jobs:
               raise SystemExit(1)
           raise SystemExit(1 if failures else 0)
           PY
-      - name: Report JVM unit test results
-        # Runner logs are not always fetchable from outside CI, so the pass/fail verdict and the
-        # per-module counts are surfaced as check-run annotations too.
-        if: always()
-        shell: bash
-        run: |
-          # the runner shell is `bash -e`, so the log greps below must not abort the step
-          set -uo pipefail
-          set +e
-          python3 - <<'PY'
-          import glob, re, xml.etree.ElementTree as ET
-          total = failures = errors = skipped = 0
-          rows = []
-          for f in sorted(glob.glob("android/*/build/test-results/testDebugUnitTest/*.xml")):
-              module = f.split("/")[1]
-              root = ET.parse(f).getroot()
-              t, fa, er, sk = (int(root.get(k, 0)) for k in ("tests", "failures", "errors", "skipped"))
-              total += t; failures += fa; errors += er; skipped += sk
-              rows.append(f"{module}: {t} tests, {fa} failures, {er} errors, {sk} skipped")
-              for case in root.iter("testcase"):
-                  for bad in list(case.iter("failure")) + list(case.iter("error")):
-                      msg = " / ".join((bad.get("message") or "").strip().splitlines()[:3]).replace("%", "%25")
-                      print(f"::error title={module} {case.get('classname')}.{case.get('name')}::{msg[:900]}")
-          summary = f"{total} run, {failures} failures, {errors} errors, {skipped} skipped"
-          print(f"JVM unit tests: {summary}")
-          for row in rows:
-              print(f"  {row}")
-          print(f"::notice title=Kotlin JVM unit tests::{summary} | " + " | ".join(rows))
-          if total == 0:
-              print("::error::No JVM unit test results were produced")
-              raise SystemExit(1)
-          raise SystemExit(1 if (failures or errors) else 0)
-          PY
-          status=$?
-          for log in /tmp/animation-tests.log /tmp/module-tests.log; do
-            [ -f "$log" ] || continue
-            { grep -E "^(e: |> Task .*FAILED)|FAILED$|error: " "$log" || true; } | head -10 | while IFS= read -r line; do
-              echo "::error::${line//$'\r'/}"
-            done
-          done
-          exit $status
       - name: Build release APK
         if: ${{ inputs.release }}
         working-directory: android
