@@ -58,6 +58,10 @@ jobs:
       - name: Build debug APK
         working-directory: android
         run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
+      - name: Playback transport unit tests (:animation)
+        # JVM tests for play/pause/stop/loop/seek and the playback validator.
+        working-directory: android
+        run: ./gradlew :animation:testDebugUnitTest --stacktrace --no-daemon
       - name: Kotlin/Compose unit tests
         working-directory: android
         run: ./gradlew :app:testDebugUnitTest --stacktrace --no-daemon
@@ -76,3 +80,4 @@ jobs:
         run: |
           echo "### Android build" >> "$GITHUB_STEP_SUMMARY"
           echo "JDK 17 · Gradle 8.9 · AGP 8.7.3 · Kotlin 2.0.21 · Filament 1.75.1" >> "$GITHUB_STEP_SUMMARY"
+          echo "Playback: :animation:testDebugUnitTest covers play/pause/stop/seek/loop/speed" >> "$GITHUB_STEP_SUMMARY"

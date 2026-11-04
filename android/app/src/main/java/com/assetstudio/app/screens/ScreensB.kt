@@ -15,7 +15,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavController
+import androidx.compose.ui.graphics.Color
 import com.assetstudio.animation.PLAYBACK_SPEEDS
+import com.assetstudio.animation.PlaybackCategory
+import com.assetstudio.animation.ProbeStatus
 import com.assetstudio.app.Routes
 import com.assetstudio.app.StudioViewModel
 import com.assetstudio.app.components.*
@@ -41,6 +44,9 @@ fun AnimationPlayerScreen(vm: StudioViewModel, nav: NavController) {
     var viewport by remember { mutableStateOf<FilamentViewport?>(null) }
     val models = ui.assets.filter { it.kind == "model" && it.humanoid }
     var modelId by remember { mutableStateOf("") }
+    var loadedLabel by remember { mutableStateOf("") }
+    val reportState by vm.playbackSession.report.collectAsState()
+    val validated by vm.playbackSession.validated.collectAsState()
     LaunchedEffect(models) { if (modelId.isBlank() && models.isNotEmpty()) {
         modelId = models.first().id; vm.selectModel(modelId)
     } }
@@ -64,10 +70,9 @@ fun AnimationPlayerScreen(vm: StudioViewModel, nav: NavController) {
                 Card(Modifier.fillMaxWidth().padding(vertical = 3.dp).clickable {
                     val cached = ui.cached.firstOrNull { it.id == a.id }
                     if (cached != null) {
-                        viewport?.loadFile(cached.localPath)
-                        vm.animationController.bind(viewport?.animationCount() ?: 0,
-                            (0 until (viewport?.animationCount() ?: 0)).map { viewport?.animationName(it) ?: "" },
-                            (0 until (viewport?.animationCount() ?: 0)).map { viewport?.animationDuration(it) ?: 0f })
+                        // Clip count/names/durations come from the loaded GLB's animator.
+                        vm.loadPlaybackAsset(cached.localPath, a.name)
+                        loadedLabel = a.name
                     } else {
                         ui.assets.firstOrNull { it.id == a.id }?.let { vm.download(it) }
                     }
@@ -120,6 +125,55 @@ fun AnimationPlayerScreen(vm: StudioViewModel, nav: NavController) {
                         FilterChip(selected = play.clipIndex == i, onClick = {
                             vm.animationController.selectClip(i, viewport?.animationDuration(i) ?: 0f)
                         }, label = { Text(name, style = MaterialTheme.typography.labelSmall) })
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Section("Runtime playback validation") {
+            Text("Poses the loaded clip at 0%, 50% and 99% through the Filament animator " +
+                "and checks that the skeleton really moved. A PASS proves the control path and bone " +
+                "matrices ran; it is not a claim about the rendered pixels.",
+                style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Button(onClick = { vm.validatePlayback() }, enabled = play.clipCount > 0) {
+                    Text("Validate loaded clip")
+                }
+                OutlinedButton(onClick = { loadedLabel = ""; vm.playbackSession.detach() },
+                    enabled = loadedLabel.isNotBlank()) { Text("Unload") }
+            }
+            val report = reportState
+            if (report != null) {
+                Spacer(Modifier.height(6.dp))
+                Text("${report.assetName}: ${report.clipCount} clip(s), ${report.frames} pose frame(s), " +
+                    "${report.passed} passed / ${report.skipped} skipped / ${report.failed} failed",
+                    style = MaterialTheme.typography.titleSmall)
+                Text(report.note, style = MaterialTheme.typography.bodySmall)
+                report.categories.filter { it.probe != null }.forEach { outcome ->
+                    val probe = outcome.probe!!
+                    val color = when (probe.status) {
+                        ProbeStatus.PASS -> Color(0xFF2E7D32)
+                        ProbeStatus.FAIL -> MaterialTheme.colorScheme.error
+                        ProbeStatus.SKIP -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                    Text("${probe.status} · ${probe.category.label} · ${probe.summary}",
+                        color = color, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Text("Categories validated on this device this session: " +
+                validated.keys.joinToString { it.label }.ifBlank { "none yet" },
+                style = MaterialTheme.typography.bodySmall)
+            PlaybackCategory.entries.chunked(3).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    row.forEach { category ->
+                        val done = validated.containsKey(category)
+                        FilterChip(selected = done, enabled = false,
+                            onClick = {}, label = {
+                                Text("${if (done) "✓" else "·"} ${category.label}",
+                                    style = MaterialTheme.typography.labelSmall)
+                            })
                     }
                 }
             }

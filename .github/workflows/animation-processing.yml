@@ -113,6 +113,11 @@ jobs:
           CHANGE_LIST: ${{ steps.changes.outputs.list }}
         run: xargs -0 -r python scripts/run_pipeline.py process-animations < "$CHANGE_LIST"
 
+      - name: Validate playback data for idle/walk/run/jump/attack/death
+        # Proves the exported GLBs really contain clips on skeleton joints with
+        # non-zero duration. Pixel-level playback still needs a device.
+        run: python scripts/validate_playback_assets.py --strict
+
       - name: Verify original uploads are untouched
         # The archive must stay byte-identical: every manifest records the source
         # SHA-256, so recompute it and fail if any original changed.
