@@ -91,7 +91,9 @@ def tree(tmp_path: Path) -> Path:
 # --------------------------------------------------------------------------- #
 # URL derivation
 # --------------------------------------------------------------------------- #
-def test_pages_base_url_is_derived_from_the_repository_slug():
+def test_pages_base_url_is_derived_from_the_repository_slug(monkeypatch):
+    # CI exports GITHUB_REPOSITORY; the fallback below must be tested without it.
+    monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
     assert pages_base_url("adii14990adi-spec/3dmodel-gen-system-") == \
         "https://adii14990adi-spec.github.io/3dmodel-gen-system-"
     assert pages_base_url("owner/repo.git") == "https://owner.github.io/repo"
