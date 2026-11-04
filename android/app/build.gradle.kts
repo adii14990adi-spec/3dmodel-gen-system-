@@ -81,6 +81,9 @@ dependencies {
     implementation(libs.filament.utils)
     implementation(libs.kotlinx.serialization)
     implementation(libs.kotlinx.coroutines)
+    // The app module owns the HTTP client that the static catalog uses (AppContainer).
+    implementation(libs.okhttp)
+    implementation(libs.okhttp.logging)
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
