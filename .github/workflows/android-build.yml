@@ -75,6 +75,47 @@ jobs:
             echo "::error::${line}"
           done
           exit 1
+      - name: Cross-check the catalog URL compiled into the debug APK
+        # The failure this guards against is a placeholder host baked into the APK, so
+        # the check reads the shipped DEX rather than the source.
+        run: |
+          python3 - <<'PY'
+          import pathlib, sys, zipfile
+          sys.path.insert(0, ".")
+          from scripts.build_pages_site import pages_base_url
+
+          apk = next(pathlib.Path("android/app/build/outputs/apk/debug").glob("*.apk"))
+          configured = ""
+          for line in pathlib.Path("android/gradle.properties").read_text().splitlines():
+              if line.startswith("assetStudio.pagesBaseUrl="):
+                  configured = line.split("=", 1)[1].strip()
+          expected = pages_base_url()
+          with zipfile.ZipFile(apk) as archive:
+              dex_names = [n for n in archive.namelist()
+                           if n.startswith("classes") and n.endswith(".dex")]
+              blob = b"".join(archive.read(name) for name in dex_names)
+          hits = blob.count(configured.encode())
+          placeholders = blob.count(b"example.invalid")
+          print(f"apk            {apk.name} ({apk.stat().st_size} bytes)")
+          print(f"dex entries    {len(dex_names)}")
+          print(f"gradle default {configured}")
+          print(f"pages base url {expected}")
+          print(f"url in dex     {hits} occurrence(s)")
+          print(f"placeholders   {placeholders} occurrence(s)")
+          problems = []
+          if configured != expected:
+              problems.append(f"gradle.properties has {configured}, Pages publishes {expected}")
+          if hits < 1:
+              problems.append("the APK does not contain the Pages catalog URL")
+          if placeholders:
+              problems.append("the APK still contains a placeholder host")
+          for problem in problems:
+              print(f"::error::{problem}")
+          if problems:
+              raise SystemExit(1)
+          print(f"::notice title=APK catalog URL::BuildConfig.CATALOG_BASE_URL = {configured}, "
+                f"present in classes.dex, zero placeholder hosts")
+          PY
       - name: Verify Filament 1.75.1 artifacts and Animator API
         # Proves the versions we compile against are the resolved ones, and that the gltfio
         # Animator methods the renderer calls actually exist in the 1.75.1 AAR. It runs after

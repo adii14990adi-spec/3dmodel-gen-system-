@@ -267,6 +267,30 @@ def test_deployment_verification_catches_a_missing_catalog(served_site):
     assert "404" in str(error.value)
 
 
+def test_site_directory_verification_checks_urls_and_digests_without_network(tree, tmp_path):
+    """Pre-deploy check: the exact bytes that will be published, at the exact paths."""
+    built = build_catalog(tree / "manifests", tree / "processed", BASE)
+    site = tmp_path / "site"
+    write_site(built, site)
+
+    result = verify_catalog(BASE, samples=5, site_dir=site)
+    assert result["verified_from"].startswith("site directory")
+    assert result["counts"] == {"models": 1, "animations": 1}
+    assert result["verified_dependencies"] >= 2
+
+    # A file whose bytes change after the catalog was written must be caught.
+    victim = site / "assets" / "models" / "model_a" / "textures" / "0.png"
+    victim.write_bytes(victim.read_bytes() + b"x")
+    with pytest.raises(VerifyError):
+        verify_catalog(BASE, samples=5, site_dir=site)
+
+    # A URL that has no file behind it must be caught as well.
+    (site / "assets" / "models" / "model_a" / "scene.bin").unlink()
+    with pytest.raises(VerifyError) as error:
+        verify_catalog(BASE, samples=5, site_dir=site)
+    assert "missing" in str(error.value)
+
+
 def test_deployment_verification_refuses_a_placeholder_base():
     with pytest.raises(VerifyError):
         verify_catalog("https://asset-studio.example.invalid/api/v1", samples=1)

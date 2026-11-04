@@ -33,7 +33,8 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any
+from pathlib import Path
+from typing import Any, Callable
 
 PLACEHOLDER_HOSTS = ("example.invalid", "example.com")
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "0.0.0.0")
@@ -56,6 +57,27 @@ def fetch(url: str, timeout: float = 30.0) -> tuple[bytes, dict[str, str]]:
         raise VerifyError(f"cannot fetch {url}: {exc}") from exc
 
 
+def fetch_from_site_dir(url: str, base_url: str, root: Path) -> tuple[bytes, dict[str, str]]:
+    """Resolve a catalog URL against a built site tree instead of the network.
+
+    Used by `--site-dir`: the URLs stay exactly as published, so the check still
+    proves that every absolute URL maps to a file at the right path, with the right
+    bytes. It is a pre-deploy check, not a substitute for fetching the live site.
+    """
+    base = base_url.rstrip("/")
+    if not url.startswith(base + "/"):
+        raise VerifyError(f"{url} is not under {base}")
+    relative = url[len(base) + 1:]
+    target = (root / relative).resolve()
+    try:
+        target.relative_to(root.resolve())
+    except ValueError as exc:
+        raise VerifyError(f"{url} escapes the site directory") from exc
+    if not target.is_file():
+        raise VerifyError(f"{url} is missing from the built site ({relative})")
+    return target.read_bytes(), {"content-type": "application/octet-stream"}
+
+
 def check_url(url: str, base_url: str, *, what: str, allow_http: bool = False) -> None:
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme != "https" and not allow_http:
@@ -72,11 +94,22 @@ def check_url(url: str, base_url: str, *, what: str, allow_http: bool = False) -
 
 def verify_catalog(base_url: str, *, samples: int = 2, timeout: float = 30.0,
                    expect_gltf: bool = True,
-                   allow_http: bool = False) -> dict[str, Any]:
-    """Fetch and cross-check the published catalog. Returns a result document."""
+                   allow_http: bool = False,
+                   site_dir: Path | None = None) -> dict[str, Any]:
+    """Fetch and cross-check the published catalog. Returns a result document.
+
+    With [site_dir] the same URLs are resolved against a built site tree instead of
+    the network; every other check (digests, sizes, glTF sidecars, absolute https
+    URLs under the base URL) is unchanged.
+    """
     base_url = base_url.rstrip("/")
+    read: Callable[[str], tuple[bytes, dict[str, str]]] = (
+        (lambda url: fetch_from_site_dir(url, base_url, site_dir)) if site_dir is not None
+        else (lambda url: fetch(url, timeout)))
+    source = f"site directory {site_dir}" if site_dir is not None else "live HTTP"
+
     index_url = f"{base_url}/catalog/index.json"
-    raw, headers = fetch(index_url, timeout)
+    raw, headers = read(index_url)
     try:
         catalog = json.loads(raw.decode("utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
@@ -96,6 +129,7 @@ def verify_catalog(base_url: str, *, samples: int = 2, timeout: float = 30.0,
     result: dict[str, Any] = {
         "base_url": base_url,
         "index_url": index_url,
+        "verified_from": source,
         "generated_at": catalog.get("generated_at"),
         "counts": {"models": counts.get("models", 0),
                    "animations": counts.get("animations", 0)},
@@ -118,7 +152,7 @@ def verify_catalog(base_url: str, *, samples: int = 2, timeout: float = 30.0,
             check_url(entry.get("manifest_url", ""), base_url, what=f"{kind} manifest_url",
                       allow_http=allow_http)
 
-            payload, _ = fetch(entry["download_url"], timeout)
+            payload, _ = read(entry["download_url"])
             if len(payload) != int(entry.get("bytes") or -1):
                 raise VerifyError(f"{entry['id']}: served {len(payload)} bytes, "
                                   f"catalog says {entry.get('bytes')}")
@@ -126,7 +160,7 @@ def verify_catalog(base_url: str, *, samples: int = 2, timeout: float = 30.0,
             if entry.get("sha256") and digest != entry["sha256"]:
                 raise VerifyError(f"{entry['id']}: served SHA-256 does not match the catalog")
 
-            manifest_raw, _ = fetch(entry["manifest_url"], timeout)
+            manifest_raw, _ = read(entry["manifest_url"])
             manifest = json.loads(manifest_raw.decode("utf-8"))
             assets = manifest.get("assets") or {}
             glb = assets.get("glb") or {}
@@ -138,7 +172,7 @@ def verify_catalog(base_url: str, *, samples: int = 2, timeout: float = 30.0,
             dependencies = assets.get("dependencies") or []
             gltf = assets.get("gltf") or {}
             if expect_gltf and entry.get("gltf_url"):
-                gltf_raw, _ = fetch(gltf["url"], timeout)
+                gltf_raw, _ = read(gltf["url"])
                 document = json.loads(gltf_raw.decode("utf-8"))
                 declared = {d.get("path", "").split("/")[-1] for d in dependencies}
                 for buffer in document.get("buffers") or []:
@@ -153,7 +187,7 @@ def verify_catalog(base_url: str, *, samples: int = 2, timeout: float = 30.0,
             for dependency in dependencies:
                 check_url(dependency.get("url", ""), base_url,
                           what=f"{entry['id']} dependency", allow_http=allow_http)
-                body, _ = fetch(dependency["url"], timeout)
+                body, _ = read(dependency["url"])
                 if len(body) != int(dependency.get("bytes") or -1):
                     raise VerifyError(f"{entry['id']}/{dependency['path']}: byte length mismatch")
                 if hashlib.sha256(body).hexdigest() != dependency.get("sha256"):
@@ -183,6 +217,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--samples", type=int, default=2,
                         help="assets verified per kind (default 2)")
     parser.add_argument("--timeout", type=float, default=30.0)
+    parser.add_argument("--site-dir", default=None,
+                        help="verify a built site tree instead of the live host (pre-deploy check)")
     parser.add_argument("--report", default=None, help="write the JSON result here")
     parser.add_argument("--allow-http", action="store_true",
                         help="accept http:// (local smoke tests only; Pages is always https)")
@@ -207,7 +243,8 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         result = verify_catalog(base_url, samples=args.samples, timeout=args.timeout,
-                                allow_http=args.allow_http)
+                                allow_http=args.allow_http,
+                                site_dir=Path(args.site_dir) if args.site_dir else None)
     except VerifyError as exc:
         print(f"FAILED: {exc}", file=sys.stderr)
         if args.report:
@@ -216,6 +253,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print(f"index               {result['index_url']}")
+    print(f"verified from       {result['verified_from']}")
     print(f"catalog generated   {result['generated_at']}")
     print(f"counts              models={result['counts']['models']} "
           f"animations={result['counts']['animations']}")

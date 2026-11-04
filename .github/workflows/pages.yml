@@ -97,6 +97,23 @@ jobs:
               raise SystemExit(1)
           raise SystemExit(1 if failures else 0)
           PY
+      - name: Verify the built artefact (URLs, sizes, digests, sidecars)
+        # Pre-deploy check of the exact tree that will be uploaded: every absolute URL
+        # must map to a file at that path with the catalog's own byte count and SHA-256.
+        env:
+          PAGES_BASE_URL: ${{ steps.pages-url.outputs.base_url }}
+        run: |
+          python scripts/verify_pages_deployment.py \
+            --base-url "$PAGES_BASE_URL" --site-dir site --samples 5 \
+            --report site-artifact-verification.json
+      - name: Upload the artefact verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-artifact-verification-${{ github.run_id }}
+          path: site-artifact-verification.json
+          if-no-files-found: warn
+          retention-days: 14
       - name: Ensure the app default matches the published base URL
         # android/gradle.properties carries the URL that ships inside the APK; a
         # mismatch is exactly how a client ends up calling a host that does not exist.
@@ -147,9 +164,42 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
+      - name: Check that GitHub Pages is enabled
+        # Fails fast with the exact manual step instead of a cryptic deploy error.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SETTINGS_URL: ${{ github.server_url }}/${{ github.repository }}/settings/pages
+        run: |
+          set -euo pipefail
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/pages")
+          echo "GET /repos/$REPO/pages -> HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "::error title=GitHub Pages is not enabled::Enable it at $SETTINGS_URL (Source: \
+            GitHub Actions), then re-run this workflow. The site artefact is built and verified \
+            in the build job of this run."
+            exit 1
+          fi
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+      - name: Cross-check the deployed URL against the URL compiled into the APK
+        env:
+          PAGES_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          set -euo pipefail
+          configured=$(grep -E '^assetStudio\.pagesBaseUrl=' android/gradle.properties | cut -d= -f2-)
+          deployed="${PAGES_URL%/}"
+          echo "deployed page_url : $deployed"
+          echo "APK catalog URL   : $configured"
+          test "$configured" = "$deployed" || {
+            echo "::error::the APK ships $configured but GitHub Pages published $deployed"
+            exit 1
+          }
+          echo "::notice title=Catalog URL::APK BuildConfig and the live Pages URL are identical ($deployed)"
       - name: Verify the deployed catalog over HTTPS
         # Fetches the live site and compares served bytes with the published
         # digests, including the .bin/.png sidecars of the glTF bundles.
