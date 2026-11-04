@@ -7,7 +7,9 @@ name: Pages
 # server, no Node/Python runtime and no secret involved in serving the site.
 on:
   push:
-    branches: [main]
+    # main publishes; feature branches build and validate the same site so a break is
+    # caught before merge (the deploy job below only runs for main).
+    branches: [main, 'arena/**']
   workflow_dispatch:
 
 permissions:
@@ -90,11 +92,20 @@ jobs:
           }
       - name: Configure GitHub Pages
         id: pages
+        # Creates the Pages site (source: GitHub Actions) when the repository has none.
+        # A repository where the workflow token may not create the site fails here;
+        # the notice names the manual step instead of hiding the real blocker.
+        continue-on-error: true
         uses: actions/configure-pages@v5
-        with:
-          # Creates the Pages site (source: GitHub Actions) when the repository has
-          # none yet, so a fresh fork does not need a manual settings change.
-          enablement: true
+        with: { enablement: true }
+      - name: Report a Pages setup problem
+        if: steps.pages.outcome != 'success'
+        env:
+          PAGES_BASE_URL: ${{ steps.pages-url.outputs.base_url }}
+        run: |
+          echo "::warning title=GitHub Pages is not enabled::The site $PAGES_BASE_URL does not \
+          exist yet. Enable it under Settings -> Pages -> Source: GitHub Actions, then re-run \
+          this workflow. The site tree was built and validated in this run."
       - name: Upload the site
         uses: actions/upload-pages-artifact@v3
         with:
@@ -104,6 +115,8 @@ jobs:
   deploy:
     name: deploy site
     needs: build
+    # Only the default branch publishes; feature branches run the build job only.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-22.04
     environment:
       name: github-pages
