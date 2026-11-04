@@ -381,3 +381,49 @@ def test_deletion_only_push_is_skipped(tmp_path: Path):
                   (tmp_path / "github_output").read_text().splitlines() if "=" in line)
     assert output["count"] == "0"
     assert Path(output["list"]).read_bytes() == b""
+
+
+# --------------------------------------------------------------------------- #
+# Pages publication rules
+# --------------------------------------------------------------------------- #
+PAGES = ROOT / ".github/workflows/pages.yml"
+ANDROID = ROOT / ".github/workflows/android-build.yml"
+
+
+def test_pages_publishes_automatically_only_from_main():
+    workflow = yaml.safe_load(PAGES.read_text())
+    guard = workflow["jobs"]["deploy"]["if"]
+
+    assert "github.ref == 'refs/heads/main'" in guard
+    # A branch under review may be published, but only by asking for it explicitly.
+    assert "workflow_dispatch" in guard and "inputs.deploy == true" in guard
+
+    inputs = workflow[True]["workflow_dispatch"]["inputs"]  # `on:` parses as True
+    assert inputs["deploy"]["type"] == "boolean"
+    assert inputs["deploy"]["default"] is False
+
+
+def test_pages_deploy_job_verifies_the_live_site_and_the_apk_url():
+    workflow = yaml.safe_load(PAGES.read_text())
+    steps = {step.get("name"): step for step in workflow["jobs"]["deploy"]["steps"]}
+
+    assert any(name and "Verify the deployed catalog over HTTPS" in name for name in steps)
+    cross_check = next(step for name, step in steps.items()
+                       if "Cross-check the deployed URL" in (name or ""))
+    assert "steps.deployment.outputs.page_url" in cross_check["env"]["PAGES_URL"]
+    # The step greps android/gradle.properties for the property the APK ships.
+    assert "pagesBaseUrl" in cross_check["run"]
+    assert "android/gradle.properties" in cross_check["run"]
+
+
+def test_android_workflow_runs_the_live_smoke_test_and_tolerates_an_outage():
+    workflow = yaml.safe_load(ANDROID.read_text())
+    step = next(s for s in workflow["jobs"]["build"]["steps"]
+                if "Live catalog smoke test" in (s.get("name") or ""))
+
+    assert "https://adii14990adi-spec.github.io/3dmodel-gen-system-" in \
+        step["env"]["ASSET_STUDIO_LIVE_BASE_URL"]
+    assert "LiveCatalogSmokeTest" in step["run"]
+    # A Pages outage must warn, not block the APK: only a failed test run exits non-zero.
+    assert 'if [ "$code" != "200" ]' in step["run"]
+    assert "::warning title=Live catalog unavailable::" in step["run"]

@@ -162,6 +162,47 @@ jobs:
         run: |
           set -o pipefail
           ./gradlew testDebugUnitTest --stacktrace --no-daemon 2>&1 | tee /tmp/module-tests.log
+      - name: Live catalog smoke test against the deployed Pages site
+        # Runs the real client code (CatalogClient + AssetDownloader) against the live
+        # site the APK ships in BuildConfig.CATALOG_BASE_URL. Skipped with a warning when
+        # the site is not reachable, so a Pages outage cannot block an APK build.
+        env:
+          ASSET_STUDIO_LIVE_BASE_URL: https://adii14990adi-spec.github.io/3dmodel-gen-system-
+        run: |
+          set -uo pipefail
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
+            "$ASSET_STUDIO_LIVE_BASE_URL/catalog/index.json" || true)
+          echo "GET $ASSET_STUDIO_LIVE_BASE_URL/catalog/index.json -> HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "::warning title=Live catalog unavailable::The deployed catalog returned \
+            HTTP $code, so the live smoke test is skipped in this run."
+            exit 0
+          fi
+          ./gradlew :asset-library:testDebugUnitTest --tests '*LiveCatalogSmokeTest*' \
+            --no-daemon --stacktrace 2>&1 | tee /tmp/live-smoke.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            grep -E "^e: |error: |^FAILURE: |> Task .*FAILED|Execution failed" /tmp/live-smoke.log \
+              | head -20 | while read -r line; do echo "::error::$line"; done
+            exit "$status"
+          fi
+          python3 - <<'PY'
+          import glob, pathlib, xml.etree.ElementTree as ET
+          total = failures = 0
+          for report in glob.glob("android/asset-library/build/test-results/**/TEST-*LiveCatalogSmokeTest.xml",
+                                  recursive=True):
+              root = ET.parse(report).getroot()
+              total += int(root.get("tests", 0))
+              failures += int(root.get("failures", 0)) + int(root.get("errors", 0))
+              for case in root.iter("testcase"):
+                  status = "skipped" if case.find("skipped") is not None else "passed"
+                  print(f"live {status}: {case.get('name')}")
+          print(f"live smoke: {total} test(s), {failures} failure(s)")
+          if total == 0:
+              print("::error::the live smoke test produced no results")
+              raise SystemExit(1)
+          raise SystemExit(1 if failures else 0)
+          PY
       - name: Report JVM unit test results
         # Runner logs are not always fetchable from outside CI, so the pass/fail verdict and the
         # per-module counts are surfaced as check-run annotations too.
