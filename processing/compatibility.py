@@ -55,7 +55,44 @@ def role_for(name: str, mappings: dict[str, Any]) -> tuple[str | None, float]:
     return None, 0.0
 
 
-def map_roles(bones: list[dict[str, Any]]) -> tuple[dict[str, list[str]], list[str], float]:
+def load_manual_map(path_or_name: str | None = None) -> dict[str, str] | None:
+    """Load an explicit ``role -> source bone name`` map from config/bone_mappings.
+
+    ``path_or_name`` may be a bare name ("mixamo_to_game"), a file name or a path.
+    Returns None when no map is given; raises for a missing/invalid file so a
+    typo never silently degrades to guessing.
+    """
+    if not path_or_name:
+        return None
+    candidate = Path(path_or_name)
+    if not candidate.is_absolute():
+        base = ROOT / "config" / "bone_mappings"
+        for option in (base / path_or_name, base / f"{path_or_name}.json"):
+            if option.is_file():
+                candidate = option
+                break
+    if not candidate.is_file():
+        raise FileNotFoundError(f"bone map not found: {path_or_name}")
+    payload = json.loads(candidate.read_text(encoding="utf-8"))
+    roles = payload.get("roles")
+    if not isinstance(roles, dict) or not roles:
+        raise ValueError(f"bone map {candidate.name} has no 'roles' mapping")
+    return {str(role): str(bone) for role, bone in roles.items()}
+
+
+def map_roles(bones: list[dict[str, Any]],
+              manual_map: dict[str, str] | None = None
+              ) -> tuple[dict[str, list[str]], list[str], float]:
+    if manual_map:
+        present = {bone.get("name") for bone in bones}
+        found = {role: [bone] for role, bone in manual_map.items() if bone in present}
+        if found:
+            # An explicit map that matches this skeleton is authoritative:
+            # no heuristics and therefore no ambiguity.
+            missing = sorted(set(manual_map) - set(found))
+            return found, [], 1.0 if not missing else 0.9
+        # The map describes a different rig: never force it onto this skeleton,
+        # fall back to the measured aliases and report the ambiguity honestly.
     mappings = load_mappings()
     found: dict[str, list[str]] = {}
     ambiguous: list[str] = []
@@ -114,7 +151,10 @@ def check_compatibility(source_bones: list[dict[str, Any]], target_bones: list[d
     cfg = load_config()["compatibility"]
     mappings = load_mappings()
     required = set(mappings.get("required_roles", []))
-    src_roles, src_amb, src_conf = map_roles(source_bones)
+    source_names = {bone.get("name") for bone in source_bones}
+    manual_map_applied = bool(manual_map) and any(bone in source_names
+                                                  for bone in (manual_map or {}).values())
+    src_roles, src_amb, src_conf = map_roles(source_bones, manual_map)
     tgt_roles, tgt_amb, tgt_conf = map_roles(target_bones)
     reasons: list[str] = []
     ambiguous = sorted(set(src_amb + tgt_amb))
@@ -146,6 +186,7 @@ def check_compatibility(source_bones: list[dict[str, Any]], target_bones: list[d
         "score": round((src_conf + tgt_conf) / 2 * coverage, 4) if compatible else 0.0,
         "role_coverage": round(coverage, 4), "mapped_bones": len(common),
         "mapped_roles": common, "unmapped_roles": unmapped_required,
-        "ambiguous_roles": ambiguous, "manual_map_applied": bool(manual_map),
+        "ambiguous_roles": ambiguous, "manual_map_applied": manual_map_applied,
+        "manual_map_roles": len(manual_map) if manual_map_applied else 0,
         "reasons": reasons or ["hierarchy, spatial and role checks passed"],
     }

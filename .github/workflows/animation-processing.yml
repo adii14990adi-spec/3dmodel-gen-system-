@@ -50,6 +50,30 @@ jobs:
           echo "/opt/blender" >> "$GITHUB_PATH"
       - name: Ensure model manifests exist
         run: python scripts/run_pipeline.py process-models --all
+      - name: Inventory the animation library
+        # Scans assets/animation (including the read-only Upload archive), detects
+        # the real format from magic bytes, measures motion, checks skeletons and
+        # writes reports/animations/library/inventory.json + skeleton-compatibility.json.
+        run: python -m processing.cli inventory
+      - name: Organize uploads into the category tree
+        # Copy-only: originals are hashed before and after, nothing is moved,
+        # overwritten or deleted. Re-runs are idempotent (identical copies are
+        # detected and reported as already_organized).
+        run: python -m processing.cli organize --apply
+      - name: Library summary
+        run: |
+          python - <<'PY'
+          import json, pathlib
+          report = json.loads(pathlib.Path("reports/animations/library/inventory.json").read_text())
+          totals = report["totals"]
+          print(f"{totals['files']} file(s): {totals['supported']} supported, "
+                f"{totals['unsupported']} unsupported, {totals['corrupted']} corrupted, "
+                f"{totals['duplicate_groups']} duplicate group(s)")
+          for category, count in sorted(totals["by_category"].items()):
+              print(f"  {category}: {count}")
+          if totals["corrupted"]:
+              raise SystemExit("corrupted sources present - see the inventory report")
+          PY
       - name: Resolve changed animation sources
         id: changes
         shell: bash
@@ -88,6 +112,28 @@ jobs:
         env:
           CHANGE_LIST: ${{ steps.changes.outputs.list }}
         run: xargs -0 -r python scripts/run_pipeline.py process-animations < "$CHANGE_LIST"
+
+      - name: Verify original uploads are untouched
+        # The archive must stay byte-identical: every manifest records the source
+        # SHA-256, so recompute it and fail if any original changed.
+        run: python scripts/verify_upload_integrity.py --root assets/animation/Upload
+      - name: Processing summary
+        if: always()
+        run: |
+          python - <<'PY'
+          import json, pathlib
+          manifests = sorted(pathlib.Path("manifests/animations").glob("*.json")) \
+              if pathlib.Path("manifests/animations").is_dir() else []
+          counts = {}
+          retargets = {}
+          for path in manifests:
+              data = json.loads(path.read_text())
+              counts[data["validation"]["status"]] = counts.get(data["validation"]["status"], 0) + 1
+              retargets[data.get("retarget_status", "")] = retargets.get(data.get("retarget_status", ""), 0) + 1
+          print(f"{len(manifests)} animation manifest(s): {counts}")
+          print(f"retarget: {retargets}")
+          print(f"runtime GLBs: {len(list(pathlib.Path('processed/animations').rglob('*.glb')))}")
+          PY
 
       - name: Build index
         run: python scripts/run_pipeline.py build-index

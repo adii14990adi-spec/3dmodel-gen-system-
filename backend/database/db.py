@@ -101,6 +101,8 @@ def sync_from_manifests() -> dict[str, int]:
             if report_dir.is_dir():
                 for p in sorted(report_dir.glob("*.json")):
                     r = read_json(p)
+                    if not isinstance(r, dict):
+                        continue  # library-wide documents are not per-asset reports
                     summary = r.get("summary") or {}
                     conn.execute(
                         "INSERT OR REPLACE INTO reports "

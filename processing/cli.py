@@ -14,7 +14,8 @@ from typing import Any
 from processing.common import (ROOT, SUPPORTED_ANIMATIONS, SUPPORTED_MODELS, asset_id,
                                category_of, load_config, log, path_for, sha256_bytes,
                                sha256_file, validate_source)
-from processing.compatibility import check_compatibility
+from processing.classify import classify
+from processing.compatibility import check_compatibility, load_manual_map
 from processing.glb import GLBError, inspect_document, load_document, write_glb
 from processing.manifest import build_manifest
 from processing.publish import build_index, publish_asset, record_job
@@ -29,7 +30,52 @@ def _discover(kind: str) -> list[Path]:
     allowed = SUPPORTED_MODELS if kind == "model" else SUPPORTED_ANIMATIONS
     if not base.is_dir():
         return []
-    return sorted(p for p in base.rglob("*") if p.is_file() and p.suffix.lower() in allowed)
+    # assets/animation/Upload is the read-only archive of the raw uploads: the
+    # organizer copies every supported file into its category folder, and those
+    # copies are the canonical sources for processing. Scanning the archive as
+    # well would publish the same bytes twice under two different asset ids.
+    archive = base / "Upload"
+    mapping = _organization_mapping()
+    # The organizer's plan names one canonical destination per content hash. That
+    # set - not "every file that looks like an animation" - is what gets processed:
+    # sources that were re-homed are skipped in favour of their copy, byte-identical
+    # twins are skipped in favour of the canonical one, and a file the organiser has
+    # never seen (freshly dropped in) is still processed so nothing goes silent.
+    canonical = {asset["destination_path"] for asset in mapping.get("assets", [])
+                 if asset.get("destination_path") and (ROOT / asset["destination_path"]).is_file()}
+    # A source the planner left in place *is* its own canonical copy.
+    canonical |= {entry["source_path"] for entry in mapping.get("skipped", [])
+                  if entry.get("reason") == "already_in_place"
+                  and (ROOT / entry["source_path"]).is_file()}
+    mapped_sources = {asset["source_path"] for asset in mapping.get("assets", [])}
+    duplicate_sources = {entry["source_path"] for entry in mapping.get("skipped", [])
+                         if entry.get("reason") == "duplicate_content"}
+    rehomed = (mapped_sources | duplicate_sources) - canonical
+    selected = []
+    for path in sorted(base.rglob("*")):
+        if not path.is_file() or path.suffix.lower() not in allowed:
+            continue
+        if base.name == "animation" and _is_relative_to(path, archive):
+            continue
+        try:
+            relative = str(path.relative_to(ROOT))
+        except ValueError:
+            relative = str(path)
+        if relative in canonical:
+            selected.append(path)  # the canonical copy for this content hash
+            continue
+        if relative in rehomed:
+            continue  # re-homed or byte-identical to a canonical copy
+        selected.append(path)
+    return selected
+
+
+def _is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+        return True
+    except ValueError:
+        return False
 
 
 def _blender_available() -> bool:
@@ -169,6 +215,79 @@ def _model_manifests() -> list[dict[str, Any]]:
     return [read_json(p) for p in sorted(directory.glob("*.json"))]
 
 
+_MAPPING_CACHE: dict[str, Any] | None = None
+
+
+def _organization_mapping() -> dict[str, Any]:
+    """Source -> destination mapping written by the ``organize`` command (if any)."""
+    global _MAPPING_CACHE
+    if _MAPPING_CACHE is None:
+        from processing.common import read_json
+        path = path_for("reports", "animations", "library", "organization-mapping.json")
+        _MAPPING_CACHE = read_json(path) if path.is_file() else {}
+    return _MAPPING_CACHE
+
+
+def _organized_path_for(relative_source: str) -> str | None:
+    document = _organization_mapping()
+    for asset in document.get("assets", []):
+        if asset.get("source_path") == relative_source:
+            return asset.get("destination_path")
+    return None
+
+
+def _skeleton_id(bones: list[dict[str, Any]]) -> str:
+    from processing.library import skeleton_id as compute
+    try:
+        return compute(bones)
+    except (KeyError, TypeError, ValueError):
+        return ""
+
+
+def library_inventory(*, include_archive: bool = True) -> dict[str, Any]:
+    """Scan the animation library, classify it and write the inventory reports."""
+    from processing.library import (build_inventory, compatibility_report, mapping_document,
+                                    plan_organization, save_json)
+    inventory = build_inventory(include_archive=include_archive)
+    compatibility = compatibility_report(inventory)
+    plan = plan_organization(inventory)
+    save_json(path_for("reports", "animations", "library", "inventory.json"), inventory)
+    save_json(path_for("reports", "animations", "library", "skeleton-compatibility.json"),
+              compatibility)
+    save_json(path_for("reports", "animations", "library", "organization-plan.json"),
+              {**plan, "mapping": mapping_document(inventory, plan)})
+    log("LIBRARY", f"{inventory['totals']['files']} file(s), "
+                   f"{len(inventory['skeleton_groups'])} skeleton group(s), "
+                   f"{inventory['totals']['duplicate_groups']} duplicate group(s)")
+    return {"totals": inventory["totals"], "skeleton_groups": len(inventory["skeleton_groups"]),
+            "planned_copies": plan["counts"]["copy"], "skipped": plan["counts"]["skipped"],
+            "report": "reports/animations/library/inventory.json"}
+
+
+def organize_animations(*, apply: bool = False, skip_unclassified: bool = False) -> dict[str, Any]:
+    """Copy classified animation sources into the category tree (never moves/deletes)."""
+    from processing.library import (apply_organization, build_inventory, mapping_document,
+                                    plan_organization, save_json)
+    inventory = build_inventory(include_archive=True)
+    plan = plan_organization(inventory, skip_unclassified=skip_unclassified)
+    applied = apply_organization(plan, dry_run=not apply)
+    document = mapping_document(inventory, plan, applied)
+    save_json(path_for("reports", "animations", "library", "organization-mapping.json"), document)
+    save_json(path_for("reports", "animations", "library", "organization-plan.json"),
+              {**plan, "applied": applied})
+    from processing.library import tracked_library_documents
+    tracked = ROOT / "docs" / "animation-library"
+    tracked.mkdir(parents=True, exist_ok=True)
+    for name, content in tracked_library_documents(inventory, document).items():
+        (tracked / name).write_text(content, encoding="utf-8")
+    log("ORGANIZE", f"{applied['copied']} copied, {applied['unchanged']} already organized, "
+                    f"{len(plan['skipped'])} skipped, {applied['failures']} failure(s)")
+    return {"applied": apply, "copied": applied["copied"], "unchanged": applied["unchanged"],
+            "planned": applied["planned"], "failures": applied["failures"],
+            "skipped": len(plan["skipped"]),
+            "mapping": "docs/animation-library/organization-mapping.json"}
+
+
 def process_animation(path: Path) -> dict[str, Any]:
     cfg = load_config()
     rel = str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path)
@@ -186,7 +305,44 @@ def process_animation(path: Path) -> dict[str, Any]:
     compatibility: list[dict[str, Any]] = []
     reason = ""
 
-    if suffix == ".bvh":
+    bvh = None
+    runtime_bytes: bytes | None = None
+    if suffix == ".fbx":
+        from processing.fbx import FBXError, inspect_fbx
+        try:
+            fbx_info = inspect_fbx(path)
+        except (FBXError, ValueError, OSError) as exc:
+            checks.append({"severity": "ERROR", "code": "FBX_INSPECTION_FAILED",
+                           "description": str(exc), "asset": path.name, "location": "FBX",
+                           "suggested_fix": "Re-export the FBX from the DCC tool, or inspect it with Blender."})
+            metadata = {"animations": {"clip_count": 0, "clips": []}, "issues": []}
+        else:
+            source_bones = fbx_info["skeleton"]["bones"]
+            clips = fbx_info["clips"]
+            metadata = {"animations": {"clip_count": len(clips), "clips": clips},
+                        "skeleton": {**fbx_info["skeleton"], "present": bool(source_bones),
+                                     "skeleton_count": 1 if source_bones else 0},
+                        "source_skeleton": fbx_info["skeleton"],
+                        "up_axis": fbx_info["up_axis"], "linear_unit": fbx_info["linear_unit"],
+                        "fbx_version": fbx_info["version"], "issues": fbx_info["issues"]}
+            checks.append({"severity": "PASS", "code": "FBX_INSPECTED",
+                           "description": (f"FBX {fbx_info['version']}, {len(source_bones)} bones, "
+                                           f"{len(clips)} clip(s), {fbx_info['up_axis']}-up, "
+                                           f"{fbx_info['linear_unit']}"),
+                           "asset": path.name, "location": "FBX", "suggested_fix": ""})
+            for clip in clips:
+                if clip.get("frame_rate") and clip["frame_rate"] > 0:
+                    checks.append({"severity": "PASS", "code": "CLIP_MEASURED",
+                                   "description": (f"clip '{clip['name']}': {clip['duration_seconds']} s, "
+                                                   f"{clip['frame_rate']} fps, {clip['key_count']} keys, "
+                                                   f"{clip['channel_count']} channels, "
+                                                   f"{len(clip['animated_bones'])} animated bones, "
+                                                   f"root motion {clip['root_motion']}"),
+                                   "asset": path.name, "location": "FBX.Takes",
+                                   "suggested_fix": ""})
+            for issue in fbx_info["issues"]:
+                checks.append({**issue, "asset": path.name, "component": "FBX"})
+    elif suffix == ".bvh":
         from processing.bvh import load_bvh, skeleton_summary
         bvh = load_bvh(path)
         summary = skeleton_summary(bvh)
@@ -208,6 +364,7 @@ def process_animation(path: Path) -> dict[str, Any]:
             checks.append({"severity": "WARNING", "code": "BLENDER_UNAVAILABLE", "description": note,
                            "asset": path.name, "location": "conversion", "suggested_fix": "Install Blender 4.2 LTS."})
         else:
+            runtime_bytes = runtime
             doc = inspect_document(load_document_from_bytes(runtime), path.name)
             source_bones = doc["skeleton"]["bones"]
             clips = doc["animations"]["clips"]
@@ -248,13 +405,60 @@ def process_animation(path: Path) -> dict[str, Any]:
                            "asset": path.name, "location": "inspection",
                            "suggested_fix": "Install Blender 4.2 LTS or use the animation-processing workflow."})
 
+    # Classification always comes from measured motion; names are only hints that
+    # must be consistent with the measurements (see processing/classify.py).
+    classification: dict[str, Any] | None = None
+    features: dict[str, Any] | None = clips[0].get("features") if clips else None
+    try:
+        if features is None and bvh is not None:
+            from processing.motion import features_from_sampler
+            from processing.samplers import BVHSampler
+            features = features_from_sampler(BVHSampler(bvh), bvh.fps)
+        elif features is None and runtime_bytes and clips:
+            from processing.motion import features_from_sampler
+            from processing.samplers import GltfSampler
+            features = features_from_sampler(GltfSampler(load_document_from_bytes(runtime_bytes)),
+                                             clips[0].get("frame_rate") or 30.0)
+    except (GLBError, KeyError, ValueError, IndexError):
+        features = None
+    if features:
+        result = classify(features, path.stem)
+        classification = result.as_dict()
+        severity = "PASS" if str(result.category).split("/")[0] != "unclassified" else "WARNING"
+        origin = ("filename" if any(w.get("code") in ("CLASSIFICATION_FROM_FILENAME",
+                                                      "FILENAME_MEASUREMENT_MISMATCH")
+                                    for w in result.warnings) else "measurement")
+        checks.append({"severity": severity, "code": "CLASSIFIED",
+                       "description": (f"{result.category} (action {result.action}, "
+                                       f"{result.confidence:.2f} confidence, {origin}): "
+                                       f"{'; '.join(result.evidence[:2])}"),
+                       "asset": path.name, "location": "classification",
+                       "suggested_fix": "" if severity == "PASS" else
+                                        "Move the file manually or improve the clip."})
+        for warning in classification.get("warnings", []):
+            checks.append({"severity": "WARNING", "code": warning["code"],
+                           "description": warning["description"], "asset": path.name,
+                           "location": "classification", "suggested_fix": warning.get("fix", "")})
+    else:
+        checks.append({"severity": "WARNING", "code": "CLASSIFICATION_UNAVAILABLE",
+                       "description": "No measurable motion data, so no category was assigned (nothing invented)",
+                       "asset": path.name, "location": "classification",
+                       "suggested_fix": "Provide a clip with keyed bones."})
+
     # Compatibility is checked against every real processed character skeleton.
+    try:
+        manual_map = load_manual_map((load_config().get("animation") or {}).get("manual_bone_map"))
+    except (FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
+        manual_map = None
+        checks.append({"severity": "ERROR", "code": "BONE_MAP_INVALID", "description": str(exc),
+                       "asset": path.name, "location": "config",
+                       "suggested_fix": "Fix config/bone_mappings/ or unset animation.manual_bone_map."})
     for model in _model_manifests():
         target_skeleton = model.get("skeleton") or {}
         target_bones = target_skeleton.get("bones", [])
         if not target_skeleton.get("present") or not target_bones:
             continue
-        record = check_compatibility(source_bones, target_bones)
+        record = check_compatibility(source_bones, target_bones, manual_map)
         record.update({"target_character_id": model["id"], "target_name": model.get("name", ""),
                        "target_path": (model.get("processed") or {}).get("path")})
         compatibility.append(record)
@@ -293,6 +497,50 @@ def process_animation(path: Path) -> dict[str, Any]:
                 checks.append({"severity": "ERROR", "code": "RETARGET_FAILED", "description": reason,
                                "asset": path.name, "location": "retarget",
                                "suggested_fix": "Provide a manual bone map in config/bone_mappings/."})
+        elif suffix == ".fbx" and manual_map:
+            from processing.fbx import load_fbx
+            from processing.retarget import retarget_fbx, validate_retarget
+            try:
+                fbx_doc = load_fbx(path)
+                glb, rmeta = retarget_fbx(fbx_doc, fbx_doc.stacks[0], target_path, path.stem,
+                                          manual_map)
+                rmeta = {**rmeta, "frame_rate": clips[0].get("frame_rate") if clips else 30.0}
+                validation = validate_retarget(features or {}, glb, rmeta)
+                rmeta["validation"] = validation
+                metadata["retarget"] = rmeta
+                checks.append({"severity": "PASS", "code": "RETARGET_COMPLETED",
+                               "description": (f"{rmeta['mapped_bones']} mapped roles, "
+                                               f"{rmeta['channel_count']} channels, "
+                                               f"{rmeta['duration_seconds']} s, root motion "
+                                               f"{rmeta['root_motion']}"),
+                               "asset": path.name, "location": "retarget", "suggested_fix": ""})
+                if validation["status"] == "validated":
+                    retarget_status = "completed"
+                    checks.append({"severity": "PASS", "code": "RETARGET_VALIDATED",
+                                   "description": (f"{validation['passed']}/{validation['total']} behavioural "
+                                                   f"checks passed; Khronos validation runs afterwards. "
+                                                   f"{validation['note']}"),
+                                   "asset": path.name, "location": "retarget",
+                                   "suggested_fix": ""})
+                else:
+                    retarget_status = "failed"
+                    glb = None
+                    checks.append({"severity": "ERROR", "code": "RETARGET_VALIDATION_FAILED",
+                                   "description": validation["reason"], "asset": path.name,
+                                   "location": "retarget",
+                                   "suggested_fix": "Inspect the retarget checks in the report before shipping."})
+            except (ValueError, KeyError, IndexError) as exc:
+                retarget_status = "failed"
+                reason = str(exc)
+                checks.append({"severity": "ERROR", "code": "RETARGET_FAILED", "description": reason,
+                               "asset": path.name, "location": "retarget",
+                               "suggested_fix": "Provide a manual bone map in config/bone_mappings/."})
+        elif suffix == ".fbx":
+            retarget_status = "manual_bone_map_required"
+            checks.append({"severity": "WARNING", "code": "MANUAL_BONE_MAP_REQUIRED",
+                           "description": "FBX skeleton cannot be paired with the target without an explicit bone map",
+                           "asset": path.name, "location": "retarget",
+                           "suggested_fix": "Add config/bone_mappings/mixamo_to_game.json and reference it from config/studio.yaml."})
         elif suffix in (".glb", ".gltf"):
             # Only an identical skeleton may be passed through; otherwise a bone
             # map is required. We never claim playback for an unverified pairing.
@@ -338,6 +586,20 @@ def process_animation(path: Path) -> dict[str, Any]:
         metadata=metadata, target_character_id=target_id,
         target_name=target_id, retarget_status=retarget_status,
         compatibility=compatibility, download_reference=f"assets/{aid}/download" if processed_path else "",
+        animation_asset={
+            "original_filename": path.name,
+            "organized_path": _organized_path_for(rel),
+            "classification": classification,
+            "skeleton_id": _skeleton_id(source_bones),
+            "compatibility_group": (_skeleton_id(source_bones) if compatibility else ""),
+            "root_motion": (clips[0].get("root_motion") if clips else None),
+            "retarget_required": retarget_status not in ("not_required", "passthrough_identical_skeleton"),
+            "retarget": {key: value for key, value in (metadata.get("retarget") or {}).items()
+                         if key in ("mapped_bones", "dropped_roles", "channel_count",
+                                    "duration_seconds", "root_motion", "height_ratio",
+                                    "target_character", "method", "frame_count")} or None,
+            "retarget_validation": (metadata.get("retarget") or {}).get("validation"),
+        },
     )
     manifest["incompatibility_reason"] = reason or ("compatible with " + target_id if target_id else "")
     paths = publish_asset(aid, "animation", glb, metadata, report, to_markdown(report), manifest)
@@ -372,6 +634,13 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--job-id", default="")
     sub.add_parser("build-index")
     sub.add_parser("status")
+    p = sub.add_parser("inventory")
+    p.add_argument("--no-archive", action="store_true",
+                   help="exclude assets/animation/Upload (the untouched archive)")
+    p = sub.add_parser("organize")
+    p.add_argument("--apply", action="store_true", help="copy files (default: dry run)")
+    p.add_argument("--skip-unclassified", action="store_true",
+                   help="keep unclassified sources in place instead of copying them")
     p = sub.add_parser("validate")
     p.add_argument("files", nargs="*")
     args = parser.parse_args(argv)
@@ -387,6 +656,11 @@ def main(argv: list[str] | None = None) -> int:
             log("WARN", f"database sync skipped: {exc}")
         print(json.dumps({"models": index["counts"]["models"],
                           "animations": index["counts"]["animations"]}, indent=2)); return 0
+    if args.command == "inventory":
+        print(json.dumps(library_inventory(include_archive=not args.no_archive), indent=2)); return 0
+    if args.command == "organize":
+        result = organize_animations(apply=args.apply, skip_unclassified=args.skip_unclassified)
+        print(json.dumps(result, indent=2)); return 0 if result["failures"] == 0 else 1
     if args.command == "validate":
         files = [Path(f) for f in args.files] or sorted(path_for("processed").rglob("*.glb"))
         for f in files:

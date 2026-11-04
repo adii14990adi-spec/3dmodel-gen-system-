@@ -25,6 +25,11 @@ runtime:
   filament_version: "1.75.1"
   ktx2_enabled: false               # only if runtime decoding is available
 
+animation:
+  manual_bone_map: "mixamo_to_game"    # config/bone_mappings/mixamo_to_game.json
+  classify: true                       # measure motion before naming a category
+  archive: "assets/animation/Upload"   # read-only archive of the original uploads
+
 compatibility:
   humanoid_min_role_coverage: 0.75
   humanoid_min_mapped_bones: 12
