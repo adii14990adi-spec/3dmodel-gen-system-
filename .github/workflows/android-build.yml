@@ -77,7 +77,9 @@ jobs:
           exit 1
       - name: Cross-check the catalog URL compiled into the debug APK
         # The failure this guards against is a placeholder host baked into the APK, so
-        # the check reads the shipped DEX rather than the source.
+        # the check inspects the shipped DEX rather than only the source. The generic
+        # "example.invalid" literal does appear once on purpose: Catalog.kt keeps the
+        # blocklist that rejects placeholder hosts at runtime.
         run: |
           python3 - <<'PY'
           import pathlib, sys, zipfile
@@ -89,32 +91,36 @@ jobs:
           for line in pathlib.Path("android/gradle.properties").read_text().splitlines():
               if line.startswith("assetStudio.pagesBaseUrl="):
                   configured = line.split("=", 1)[1].strip()
-          expected = pages_base_url()
+          expected = pages_base_url(allow_http=False)
           with zipfile.ZipFile(apk) as archive:
-              dex_names = [n for n in archive.namelist()
-                           if n.startswith("classes") and n.endswith(".dex")]
+              dex_names = sorted(n for n in archive.namelist()
+                                 if n.startswith("classes") and n.endswith(".dex"))
               blob = b"".join(archive.read(name) for name in dex_names)
-          hits = blob.count(configured.encode())
-          placeholders = blob.count(b"example.invalid")
-          print(f"apk            {apk.name} ({apk.stat().st_size} bytes)")
-          print(f"dex entries    {len(dex_names)}")
-          print(f"gradle default {configured}")
-          print(f"pages base url {expected}")
-          print(f"url in dex     {hits} occurrence(s)")
-          print(f"placeholders   {placeholders} occurrence(s)")
+          pages_hits = blob.count(configured.encode())
+          bad_host_hits = blob.count(b"asset-studio.example.invalid")
+          blocklist_hits = blob.count(b"example.invalid")
+          print(f"apk                    {apk.name} ({apk.stat().st_size} bytes)")
+          print(f"dex entries            {len(dex_names)}: {', '.join(dex_names)}")
+          print(f"gradle default         {configured}")
+          print(f"pages base url         {expected}")
+          print(f"catalog url in dex     {pages_hits} occurrence(s)")
+          print(f"bad host in dex        {bad_host_hits} occurrence(s)")
+          print(f"blocklist literal      {blocklist_hits} occurrence(s) (expected 1, runtime guard)")
           problems = []
-          if configured != expected:
+          if not configured:
+              problems.append("android/gradle.properties does not define assetStudio.pagesBaseUrl")
+          elif configured != expected:
               problems.append(f"gradle.properties has {configured}, Pages publishes {expected}")
-          if hits < 1:
+          if pages_hits < 1:
               problems.append("the APK does not contain the Pages catalog URL")
-          if placeholders:
-              problems.append("the APK still contains a placeholder host")
+          if bad_host_hits:
+              problems.append("the APK still resolves the placeholder host asset-studio.example.invalid")
           for problem in problems:
               print(f"::error::{problem}")
           if problems:
               raise SystemExit(1)
           print(f"::notice title=APK catalog URL::BuildConfig.CATALOG_BASE_URL = {configured}, "
-                f"present in classes.dex, zero placeholder hosts")
+                f"shipped in the DEX, zero placeholder hosts")
           PY
       - name: Verify Filament 1.75.1 artifacts and Animator API
         # Proves the versions we compile against are the resolved ones, and that the gltfio
