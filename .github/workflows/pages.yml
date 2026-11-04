@@ -1,0 +1,133 @@
+name: Pages
+
+# Publishes the static asset catalog to GitHub Pages.
+#
+# This is the hosting model of the product: the Android app reads
+# `<pages>/catalog/index.json` and downloads `<pages>/assets/...`. There is no API
+# server, no Node/Python runtime and no secret involved in serving the site.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build site
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11', cache: 'pip' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Install pinned dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          npm ci --prefix tools/gltf-validator || npm install --prefix tools/gltf-validator
+      - name: Build the pipeline outputs the site publishes
+        run: |
+          python -m processing.cli process-models --all
+          python -m processing.cli process-animations --all
+          python -m processing.cli build-index
+      - name: Report the Pages base URL that will be published
+        id: pages-url
+        run: |
+          set -euo pipefail
+          owner=$(python -c "import os;print(os.environ['GITHUB_REPOSITORY'].split('/')[0].lower())")
+          repo=$(python -c "import os;print(os.environ['GITHUB_REPOSITORY'].split('/')[1])")
+          echo "base_url=https://${owner}.github.io/${repo}" >> "$GITHUB_OUTPUT"
+      - name: Build the static catalog
+        env:
+          PAGES_BASE_URL: ${{ steps.pages-url.outputs.base_url }}
+        run: |
+          python scripts/build_pages_site.py --output site --base-url "$PAGES_BASE_URL"
+      - name: Validate the emitted glTF + BIN + PNG bundles
+        # Proves the multi-file form works: the Khronos validator resolves scene.bin
+        # and every texture relative to the published .gltf.
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys
+          sys.path.insert(0, ".")
+          from processing.validate import validate_glb
+          gltfs = sorted(pathlib.Path("site/assets").glob("*/**/scene.gltf"))
+          if not gltfs:
+              print("ERROR: the site published no glTF bundles"); raise SystemExit(1)
+          sample = gltfs[:5] + gltfs[-5:] if len(gltfs) > 10 else gltfs
+          errors = 0
+          for path in sample:
+              for check in validate_glb(path):
+                  if check["severity"] == "ERROR":
+                      errors += 1
+                      print(f"::error file={path}::{check['code']}: {check['description']}")
+          print(f"validated {len(sample)} of {len(gltfs)} glTF bundle(s); {errors} error(s)")
+          raise SystemExit(1 if errors else 0)
+          PY
+      - name: Ensure the app default matches the published base URL
+        # android/gradle.properties carries the URL that ships inside the APK; a
+        # mismatch is exactly how a client ends up calling a host that does not exist.
+        env:
+          PUBLISHED_BASE_URL: ${{ steps.pages-url.outputs.base_url }}
+        run: |
+          set -euo pipefail
+          configured=$(grep -E '^assetStudio\.pagesBaseUrl=' android/gradle.properties | cut -d= -f2-)
+          published="$PUBLISHED_BASE_URL"
+          echo "app default : $configured"
+          echo "pages will be: $published"
+          test "$configured" = "$published" || {
+            echo "::error::android/gradle.properties holds $configured but Pages publishes $published"
+            exit 1
+          }
+      - name: Configure GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v5
+        with:
+          # Creates the Pages site (source: GitHub Actions) when the repository has
+          # none yet, so a fresh fork does not need a manual settings change.
+          enablement: true
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+          retention-days: 7
+
+  deploy:
+    name: deploy site
+    needs: build
+    runs-on: ubuntu-22.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Verify the deployed catalog over HTTPS
+        # Fetches the live site and compares served bytes with the published
+        # digests, including the .bin/.png sidecars of the glTF bundles.
+        env:
+          PAGES_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          python scripts/verify_pages_deployment.py \
+            --base-url "$PAGES_URL" --samples 3 --report pages-verification.json
+      - name: Upload the verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pages-verification-${{ github.run_id }}
+          path: pages-verification.json
+          if-no-files-found: warn
+          retention-days: 14

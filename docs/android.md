@@ -42,7 +42,7 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 ## Twelve screens (all real)
 
-1. **Home** — live counts from `/api/v1/health`, offline cache size, navigation to all screens.
+1. **Home** — counts from the cached GitHub Pages catalog (`catalog/index.json`), offline cache size, navigation to all screens.
 2. **Asset Library** — search/sort, size/info/status, download with progress, GLB/glTF import via SAF, open actions.
 3. **Model Browser** — models with humanoid flag, links to geometry/materials/skeleton/report inspectors.
 4. **3D Viewport** — SurfaceView + `ModelViewer` (Filament), touch orbit/zoom/pan, reset, six axis views, perspective/orthographic, grid/axes/ground/skeleton overlays, HDR/shadows/exposure, PBR/textured/solid/wireframe/x-ray/normal modes, Performance/Balanced/High, FPS overlay.
@@ -62,6 +62,7 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 - Quality caps Performance to ~30 fps under thermal pressure; Balanced is the default. No geometry reduction is applied.
 - KTX2/Basis is disabled unless runtime decoding is available (`runtime.ktx2_enabled: false`).
 - Debug overlays are genuine glTF LINE/TRIANGLES primitives built by `DebugGlbBuilder` and loaded through `gltfio`, not a 2D canvas mock.
+- The app performs **no** authenticated or dynamic calls: metadata and geometry are static files on GitHub Pages (see [hosting.md](hosting.md)).
 - Optional Filament APIs (orthographic projection, exposure, HDR/shadows switches, MSAA) are wrapped in `runCatching` so a renderer backend that rejects one call degrades gracefully instead of crashing.
 
 Runtime animation playback (transport, validation, limits) is documented separately in
@@ -115,7 +116,7 @@ and as a pytest case (`tests/unit/test_extras.py`).
 | API leaking across `implementation` | `SkeletonInspector.overlayLines(): List<DebugLine>` returns a `:renderer` type while `:skeleton` declares `:renderer` as `implementation`. It compiles only because `:app` also depends on `:renderer` directly. Latent fragility — noted, not changed in Step 1 | Documented |
 | Namespaces / IDs | Unique namespace per module; `applicationId com.assetstudio.app` with `.debug` suffix; FileProvider authority `${applicationId}.fileprovider` matches the runtime `"${ctx.packageName}.fileprovider"` | OK |
 | SDK configuration | `compileSdk`/`targetSdk` 35, `minSdk` 26, `buildConfig` + `compose` features on; CI installs `platforms;android-35` and `build-tools;35.0.0` | OK |
-| Hardcoded paths | None; `keystore.properties` is optional and git-ignored; API base URL defaults to the `example.invalid` placeholder and is user-configurable at runtime | OK |
+| Hardcoded paths | None; `keystore.properties` is optional and git-ignored; the catalog base URL is the published GitHub Pages site (`android/gradle.properties` → `BuildConfig.CATALOG_BASE_URL`) and is overridable at runtime; placeholder hosts are rejected by `scripts/check_android_sources.py` | OK |
 | Secrets | No keys, keystores or tokens in the tree; secret-pattern scan is part of the static checks; R8/`BuildConfig` carry no credentials | OK |
 | GitHub Actions | `android-build.yml`: JDK 17 + SDK 35 + wrapper validation + optional signing + artifact upload; `validation.yml` mirrors the local pipeline; `release.yml` gated on secrets | OK (added pre-Gradle static step) |
 | Unit tests in `android/` | There are **no** JVM unit test sources yet (`./gradlew test` runs an empty suite) | Gap, documented |

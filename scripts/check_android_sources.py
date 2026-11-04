@@ -213,6 +213,85 @@ def playback_contract_issues() -> list[str]:
     return issues
 
 
+# --------------------------------------------------------------------------- #
+# Hosting contract: static GitHub Pages catalog, never a placeholder backend host
+# --------------------------------------------------------------------------- #
+HOSTING_PLACEHOLDERS = ["example.invalid", "example.com", "api/v1"]
+HOSTING_REQUIRED_FILES = [
+    "asset-library/src/main/java/com/assetstudio/library/catalog/CatalogClient.kt",
+    "asset-library/src/main/java/com/assetstudio/library/catalog/AssetBundle.kt",
+    "asset-library/src/main/java/com/assetstudio/library/catalog/Catalog.kt",
+    "asset-library/src/main/java/com/assetstudio/library/repository/AssetRepository.kt",
+]
+HOSTING_REQUIRED_REFS = [
+    ("catalog/index.json", "the client must fetch the published catalog index"),
+    ("CATALOG_BASE_URL", "the Pages base URL must come from the build config"),
+    ("AssetBundle.files", "downloads must follow the catalog bundle plan"),
+]
+
+
+def hosting_contract_issues() -> list[str]:
+    """The app must read the static Pages catalog and nothing else.
+
+    This is the gate for the class of bug that produced
+    `Unable to resolve host "asset-studio.example.invalid"`: a placeholder host had
+    been compiled into the APK. Any placeholder or `/api/v1` path in Kotlin or Gradle
+    sources now fails the build, and the static-catalog client must be present.
+    """
+    issues: list[str] = []
+    for relative in HOSTING_REQUIRED_FILES:
+        if not (ANDROID / relative).is_file():
+            issues.append(f"static catalog file missing: {relative}")
+
+    scanned: dict[str, str] = {}
+    for pattern in ("**/*.kt", "**/*.kts"):
+        for path in ANDROID.glob(pattern):
+            if "/build/" in str(path):
+                continue
+            try:
+                scanned[str(path.relative_to(ROOT))] = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+    properties = ANDROID / "gradle.properties"
+    if properties.is_file():
+        scanned[str(properties.relative_to(ROOT))] = properties.read_text(encoding="utf-8")
+
+    for relative, text in scanned.items():
+        for number, line in enumerate(text.splitlines(), start=1):
+            lowered = line.lower()
+            if "placeholders" in lowered:
+                continue  # the deny-list itself has to spell the hosts out
+            for placeholder in HOSTING_PLACEHOLDERS:
+                if placeholder in lowered:
+                    issues.append(
+                        f"{relative}:{number}: placeholder backend reference {placeholder!r}")
+
+    catalog_dir = ANDROID / "asset-library/src/main/java/com/assetstudio/library/catalog"
+    catalog_sources = "\n".join(
+        path.read_text(encoding="utf-8") for path in catalog_dir.glob("*.kt")) if catalog_dir.is_dir() else ""
+    for needle, why in HOSTING_REQUIRED_REFS:
+        if needle not in catalog_sources + "\n" + (
+                (ANDROID / "asset-library/src/main/java/com/assetstudio/library/repository/AssetRepository.kt")
+                .read_text(encoding="utf-8") if HOSTING_REQUIRED_FILES[3] and (
+                    ANDROID / "asset-library/src/main/java/com/assetstudio/library/repository/AssetRepository.kt").is_file() else ""):
+            issues.append(f"static catalog wiring missing {needle!r}: {why}")
+
+    versions = (ANDROID / "gradle/libs.versions.toml").read_text(encoding="utf-8")
+    if "retrofit" in versions.lower():
+        issues.append("the app still depends on Retrofit (a dynamic backend client)")
+
+    pages_url = ""
+    if properties.is_file():
+        for line in properties.read_text(encoding="utf-8").splitlines():
+            if line.startswith("assetStudio.pagesBaseUrl="):
+                pages_url = line.split("=", 1)[1].strip()
+    if not pages_url.startswith("https://") or ".github.io/" not in pages_url:
+        issues.append(
+            "android/gradle.properties must pin assetStudio.pagesBaseUrl to the "
+            f"https://<owner>.github.io/<repo> site, got {pages_url!r}")
+    return issues
+
+
 def main() -> int:
     failures: list[str] = []
     for mod in MODULES:
@@ -245,13 +324,15 @@ def main() -> int:
         for issue in kotlin_structure_issues(path):
             failures.append(f"{path.relative_to(ROOT)}: {issue}")
     failures.extend(playback_contract_issues())
+    failures.extend(hosting_contract_issues())
     for f in failures:
         print("FAIL:", f)
     if failures:
         print(f"{len(failures)} Android source check(s) failed")
         return 1
     print(f"Android source checks passed: {len(MODULES)} modules, {len(SCREENS)} screens, "
-          f"version matrix pinned, {len(kotlin_files)} Kotlin files balanced")
+          f"version matrix pinned, {len(kotlin_files)} Kotlin files balanced, "
+          f"static Pages catalog wired")
     return 0
 
 

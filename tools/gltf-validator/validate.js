@@ -15,7 +15,8 @@ if (!file) {
 }
 const ext = path.extname(file).toLowerCase();
 const isBinary = ext === '.glb';
-const bytes = new Uint8Array(fs.readFileSync(file));
+const raw = fs.readFileSync(file);
+const bytes = new Uint8Array(raw);
 const severity = ['ERROR', 'WARNING', 'INFO', 'HINT'];
 
 const options = {
@@ -32,7 +33,10 @@ const options = {
   }
 };
 
-const task = isBinary ? validator.validateBytes(bytes, options) : validator.validateString(bytes.toString('utf8'), options);
+// A Uint8Array's toString() returns "123,34,..." - it ignores the encoding argument and
+// turns every .gltf into INVALID_JSON. Decode the Buffer instead.
+const task = isBinary ? validator.validateBytes(bytes, options)
+                      : validator.validateString(raw.toString('utf8'), options);
 task.then((report) => {
   const issues = report.issues || {};
   issues.messages = (issues.messages || []).map((m) => ({

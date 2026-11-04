@@ -1,5 +1,10 @@
 # Metadata API
 
+> **Not part of the app's hosting model.** The Android app reads the static GitHub Pages
+> catalog instead (see [hosting.md](hosting.md)); nothing in `android/` calls these
+> endpoints, and Retrofit was removed from the build. This FastAPI service remains as an
+> optional local tool for browsing the pipeline output.
+
 FastAPI, SQLite, versioned at `/api/v1`. Start with:
 
 ```bash

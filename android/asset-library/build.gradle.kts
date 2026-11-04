@@ -17,13 +17,18 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+    buildFeatures { buildConfig = true }
+    defaultConfig {
+        // Same property the app module uses, so the catalog URL has one source.
+        val pagesBaseUrl = (project.findProperty("assetStudio.pagesBaseUrl") as String?)
+            ?: error("assetStudio.pagesBaseUrl is missing from android/gradle.properties")
+        buildConfigField("String", "CATALOG_BASE_URL", "\"$pagesBaseUrl\"")
+    }
 }
 
 dependencies {
     implementation(project(":core"))
     implementation(project(":data"))
-    implementation(libs.retrofit)
-    implementation(libs.retrofit.serialization)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
     implementation(libs.kotlinx.serialization)
@@ -34,4 +39,6 @@ dependencies {
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     testImplementation(libs.junit)
+    testImplementation(libs.okhttp.mockwebserver)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

@@ -71,19 +71,21 @@ model-agnostic so a future generator can be plugged in without touching them.
   processed/*.glb            manifests/*.json              reports/*.json
   (runtime assets)           (versioned index)             (diagnostics)
         │                           │                            │
-  object storage  ◄────────  backend/ (FastAPI + SQLite)  ──────►│
-  (S3-compatible)            /api/v1 · auth · signed URLs        │
-                                    │                            │
-                          Kotlin / Compose / Filament            │
-                               Android viewer  ◄─────────────────┘
+        │                           │                            │
+  GitHub Pages  ◄───────────────────┴────────────────────────────┘
+  (static site:                 Kotlin / Compose / Filament
+   catalog/index.json +           Android viewer  ◄── HTTPS GET
+   assets/<id>/<id>.glb            (no API server, no auth)
+   + .gltf/.bin/.png)
 ```
 
 **Key architectural rules**
 
 1. Source assets under `assets/` are **read-only**; only copies in `processed/` are ever written or repaired.
-2. GitHub Actions runners are **temporary processing environments, not servers**. Persistent runtime assets belong in
-   object storage; metadata belongs in the API database; manifests and reports are release artifacts.
-3. The metadata API never guesses asset properties — it reads published manifests only.
+2. GitHub Actions runners are **temporary processing environments, not servers**. The published runtime is a
+   **static** GitHub Pages site (`catalog/*.json` + `assets/**`); there is no API server in the product path —
+   see [docs/hosting.md](docs/hosting.md).
+3. Metadata always comes from published manifests; the app reads the static catalog and never guesses asset properties.
 4. GLB/glTF is the only runtime delivery format. Filament does **not** load arbitrary FBX/BVH files.
 5. Folder names are organisational metadata only; the pipeline reads actual bytes.
 
@@ -257,11 +259,14 @@ npm ci --prefix tools/gltf-validator          # official Khronos validator
 # 3. Validate every processed GLB with the official Khronos validator
 .venv/bin/python -m processing.cli validate                   # 16 valid GLBs: 0 errors
 
-# 4. Run the metadata API and operations console
-ASSET_STUDIO_API_KEY=change-me .venv/bin/uvicorn backend.app:app --host 0.0.0.0 --port 8000
-#    http://localhost:8000/          read-only console
-#    http://localhost:8000/docs      OpenAPI
-#    http://localhost:8000/api/v1/health
+# 4. Build the static catalog that GitHub Pages serves (this is what the app reads)
+.venv/bin/python scripts/build_pages_site.py --output site
+#    site/catalog/index.json         listing: absolute https URLs, sizes, digests
+#    site/assets/<kind>/<id>/…       GLB + glTF/BIN/PNG bundles
+#    verified in CI by scripts/verify_pages_deployment.py against the live site
+#
+#    The FastAPI service in backend/ is an OPTIONAL local tool; the Android app
+#    does not contact it (`uvicorn backend.app:app` still works if you want it).
 
 # 5. Tests
 .venv/bin/python -m pytest -q                                 # 202 passed
@@ -282,7 +287,19 @@ git push origin <your-branch>
 
 ---
 
-## 7. Metadata API
+## 7. Hosting — GitHub Pages static catalog
+
+The Android app reads `https://<owner>.github.io/<repo>/catalog/index.json` and downloads
+`assets/<kind>/<id>/…` from the same origin. The base URL ships in
+`android/gradle.properties` (`assetStudio.pagesBaseUrl`), is injected as
+`BuildConfig.CATALOG_BASE_URL`, and is verified twice in CI: the Pages workflow refuses to
+deploy if GitHub's base URL differs, and a post-deploy step re-downloads every sampled GLB
+and `.bin`/`.png` sidecar and compares its SHA-256 with the catalog.
+
+Full architecture, schemas and limits: [docs/hosting.md](docs/hosting.md).
+Published URL (read it, do not guess it): `gh api repos/<owner>/<repo>/pages`.
+
+### Optional local API (not used by the app)
 
 Base path `/api/v1`. Set `ASSET_STUDIO_API_KEY` to require the `X-API-Key` header; rate limiting defaults to
 120 requests/minute/IP.

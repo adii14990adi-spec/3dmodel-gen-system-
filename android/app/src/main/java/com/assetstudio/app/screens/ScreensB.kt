@@ -368,22 +368,22 @@ fun SettingsScreen(vm: StudioViewModel, nav: NavController) {
     val s = ui.settings
     val scope = rememberCoroutineScope()
     var url by remember { mutableStateOf(s?.apiBaseUrl ?: "") }
-    var key by remember { mutableStateOf(s?.apiKey ?: "") }
     LaunchedEffect(s?.apiBaseUrl) { url = s?.apiBaseUrl ?: "" }
     ScreenScaffold("Settings", nav) {
-        Section("Metadata API (no credentials are bundled in the APK)") {
+        Section("Static catalog (GitHub Pages, no credentials)") {
             OutlinedTextField(value = url, onValueChange = { url = it },
-                label = { Text("API base URL (/api/v1/)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            OutlinedTextField(value = key, onValueChange = { key = it },
-                label = { Text("API key (optional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                label = { Text("Catalog base URL (https://<owner>.github.io/<repo>)") },
+                modifier = Modifier.fillMaxWidth(), singleLine = true)
+            Text("Metadata and GLB/glTF downloads are plain HTTPS files served by GitHub Pages. " +
+                "There is no API server and no API key.",
+                style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(6.dp))
             Button(onClick = {
                 scope.launch {
-                    vm.setSetting(SettingsRepository.API_BASE_URL, url)
-                    vm.setSetting(SettingsRepository.API_KEY, key)
-                    vm.refresh()
+                    vm.setSetting(SettingsRepository.CATALOG_BASE_URL, url.trim().trimEnd('/'))
+                    vm.refreshCatalog()
                 }
-            }) { Text("Save and reconnect") }
+            }) { Text("Save and refresh catalog") }
         }
         Spacer(Modifier.height(8.dp))
         Section("Rendering quality (Balanced default)") {

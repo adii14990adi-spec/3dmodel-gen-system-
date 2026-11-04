@@ -12,7 +12,8 @@ import com.assetstudio.animation.PlaybackSession
 import com.assetstudio.core.model.*
 import com.assetstudio.data.db.CachedAssetEntity
 import com.assetstudio.data.prefs.StudioSettings
-import com.assetstudio.library.api.HealthDto
+import com.assetstudio.library.catalog.CatalogDefaults
+import com.assetstudio.library.catalog.HealthDto
 import com.assetstudio.library.download.DownloadState
 import com.assetstudio.skeleton.SkeletonInspector
 import kotlinx.coroutines.Job
@@ -76,7 +77,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app) {
         _playbackSession = PlaybackSession(animationController)
         viewModelScope.launch {
             container.settings.settings.collect { s ->
-                container.configure(s.apiBaseUrl, s.apiKey)
+                container.configure(s.apiBaseUrl)
                 _ui.update { it.copy(settings = s) }
                 refresh()
             }
@@ -88,19 +89,44 @@ class StudioViewModel(app: Application) : AndroidViewModel(app) {
     /** Set by the 3D Viewport screen while it is on screen. */
     @Volatile var viewport: com.assetstudio.renderer.FilamentViewport? = null
 
+    /**
+     * Re-read the GitHub Pages catalog and republish it to the UI.
+     *
+     * Failure is not fatal: the Room copy written by the previous refresh keeps the
+     * library, the detail screens and downloaded GLBs usable offline, and the
+     * message names the exact URL that could not be reached instead of hiding it.
+     */
     fun refresh() {
         refreshJob?.cancel()
         refreshJob = viewModelScope.launch {
             _ui.update { it.copy(busy = true, message = "") }
+            val base = _ui.value.settings?.apiBaseUrl ?: CatalogDefaults.DEFAULT_BASE_URL
             runCatching {
+                val refresh = repo.refreshCatalog(force = true)
                 val health = repo.health()
                 val assets = repo.assets(_ui.value.search, _ui.value.sort)
-                _ui.update { it.copy(health = health, assets = assets, busy = false) }
+                _ui.update {
+                    it.copy(
+                        health = health, assets = assets, busy = false,
+                        message = "Catalog ${refresh.counts.models} model(s), " +
+                            "${refresh.counts.animations} animation(s) from " +
+                            "${refresh.baseUrl}${if (refresh.fromCache) " (cached copy)" else ""}"
+                    )
+                }
             }.onFailure { e ->
-                _ui.update { it.copy(busy = false, message = "Backend unavailable: ${e.message}. Cached assets remain usable offline.") }
+                runCatching { repo.assets(_ui.value.search, _ui.value.sort) }.onSuccess { cached ->
+                    _ui.update { it.copy(assets = cached) }
+                }
+                _ui.update {
+                    it.copy(busy = false, message = "Catalog unreachable at $base: " +
+                        "${e.message}. Downloaded assets remain usable offline.")
+                }
             }
         }
     }
+
+    /** Force a metadata refresh without touching the search field. */
+    fun refreshCatalog() = refresh()
 
     fun search(query: String) { _ui.update { it.copy(search = query) }; refresh() }
     fun sort(value: String) { _ui.update { it.copy(sort = value) }; refresh() }
