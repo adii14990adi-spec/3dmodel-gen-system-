@@ -103,7 +103,9 @@ jobs:
         if: always()
         shell: bash
         run: |
+          # the runner shell is `bash -e`, so the log greps below must not abort the step
           set -uo pipefail
+          set +e
           python3 - <<'PY'
           import glob, re, xml.etree.ElementTree as ET
           total = failures = errors = skipped = 0
@@ -131,7 +133,7 @@ jobs:
           status=$?
           for log in /tmp/animation-tests.log /tmp/module-tests.log; do
             [ -f "$log" ] || continue
-            grep -E "^(e: |> Task .*FAILED)|FAILED$|error: " "$log" | head -10 | while IFS= read -r line; do
+            { grep -E "^(e: |> Task .*FAILED)|FAILED$|error: " "$log" || true; } | head -10 | while IFS= read -r line; do
               echo "::error::${line//$'\r'/}"
             done
           done

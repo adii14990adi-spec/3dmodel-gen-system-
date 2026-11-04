@@ -46,15 +46,16 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
+          set +e
           status=0
           pytest -q 2>&1 | tee /tmp/pytest.log || status=$?
           summary=$(grep -Eo "[0-9]+ (passed|failed|error)[^,]*" /tmp/pytest.log | tail -1)
           echo "::notice title=Python test suite::${summary:-no summary line}"
           if [ "$status" -ne 0 ]; then
-            grep -E "^(FAILED|ERROR) " /tmp/pytest.log | head -8 | while IFS= read -r line; do
+            { grep -E "^(FAILED|ERROR) " /tmp/pytest.log || true; } | head -8 | while IFS= read -r line; do
               echo "::error::${line}"
             done
-            grep -E "^E  " /tmp/pytest.log | head -4 | while IFS= read -r line; do
+            { grep -E "^E  " /tmp/pytest.log || true; } | head -4 | while IFS= read -r line; do
               echo "::error::${line}"
             done
           fi
