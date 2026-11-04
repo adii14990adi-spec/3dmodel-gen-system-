@@ -64,6 +64,9 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 - Debug overlays are genuine glTF LINE/TRIANGLES primitives built by `DebugGlbBuilder` and loaded through `gltfio`, not a 2D canvas mock.
 - Optional Filament APIs (orthographic projection, exposure, HDR/shadows switches, MSAA) are wrapped in `runCatching` so a renderer backend that rejects one call degrades gracefully instead of crashing.
 
+Runtime animation playback (transport, validation, limits) is documented separately in
+[`android-playback.md`](android-playback.md).
+
 **Not verified here:** no JDK/Android SDK/device in the sandbox, so no APK was compiled and no device tests were run. `scripts/check_android_sources.py` validates module structure, all 12 screen destinations, version pins, absence of hardcoded secrets and Kotlin lexical balance.
 
 ## Step 1 build fix and foundation audit (2026-11-03)

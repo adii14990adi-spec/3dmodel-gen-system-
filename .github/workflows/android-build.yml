@@ -55,12 +55,89 @@ jobs:
           keyAlias=$SIGNING_KEY_ALIAS
           keyPassword=$SIGNING_KEY_PASSWORD
           EOF
+      - name: Verify Filament 1.75.1 artifacts and Animator API
+        # Proves the versions we compile against are the resolved ones, and that the gltfio
+        # Animator methods the renderer calls actually exist in the 1.75.1 AAR.
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew :renderer:dependencies --configuration debugCompileClasspath --no-daemon > /tmp/filament-deps.txt
+          grep -E "filament-(android|utils-android)|gltfio-android" /tmp/filament-deps.txt | sort -u
+          grep -q "filament-android:1.75.1" /tmp/filament-deps.txt
+          grep -q "gltfio-android:1.75.1" /tmp/filament-deps.txt
+          grep -q "filament-utils-android:1.75.1" /tmp/filament-deps.txt
+          AAR=$(find "$HOME/.gradle/caches/modules-2" -name "gltfio-android-1.75.1.aar" | head -1)
+          test -n "$AAR" || { echo "::error::gltfio-android-1.75.1.aar was not downloaded"; exit 1; }
+          rm -rf /tmp/gltfio && mkdir -p /tmp/gltfio
+          unzip -q -o "$AAR" 'classes.jar' -d /tmp/gltfio
+          javap -classpath /tmp/gltfio/classes.jar com.google.android.filament.gltfio.Animator > /tmp/animator-api.txt
+          cat /tmp/animator-api.txt
+          for sym in applyAnimation updateBoneMatrices getAnimationCount getAnimationDuration getAnimationName; do
+            grep -q "$sym" /tmp/animator-api.txt || { echo "::error::Animator#$sym missing from gltfio-android 1.75.1"; exit 1; }
+          done
+          echo "::notice title=Filament 1.75.1::resolved AAR verified; Animator exposes applyAnimation, updateBoneMatrices, getAnimationCount, getAnimationDuration, getAnimationName"
       - name: Build debug APK
         working-directory: android
         run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
-      - name: Kotlin/Compose unit tests
+      - name: Playback transport unit tests (:animation)
+        # JVM tests for play/pause/stop/loop/seek and the playback validator.
+        id: animation_tests
+        continue-on-error: true
         working-directory: android
-        run: ./gradlew :app:testDebugUnitTest --stacktrace --no-daemon
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew :animation:testDebugUnitTest --stacktrace --no-daemon 2>&1 | tee /tmp/animation-tests.log
+      - name: Kotlin unit tests (all Android modules)
+        id: module_tests
+        continue-on-error: true
+        working-directory: android
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew testDebugUnitTest --stacktrace --no-daemon 2>&1 | tee /tmp/module-tests.log
+      - name: Report JVM unit test results
+        # Runner logs are not always fetchable from outside CI, so the pass/fail verdict and the
+        # per-module counts are surfaced as check-run annotations too.
+        if: always()
+        shell: bash
+        run: |
+          # the runner shell is `bash -e`, so the log greps below must not abort the step
+          set -uo pipefail
+          set +e
+          python3 - <<'PY'
+          import glob, re, xml.etree.ElementTree as ET
+          total = failures = errors = skipped = 0
+          rows = []
+          for f in sorted(glob.glob("android/*/build/test-results/testDebugUnitTest/*.xml")):
+              module = f.split("/")[1]
+              root = ET.parse(f).getroot()
+              t, fa, er, sk = (int(root.get(k, 0)) for k in ("tests", "failures", "errors", "skipped"))
+              total += t; failures += fa; errors += er; skipped += sk
+              rows.append(f"{module}: {t} tests, {fa} failures, {er} errors, {sk} skipped")
+              for case in root.iter("testcase"):
+                  for bad in list(case.iter("failure")) + list(case.iter("error")):
+                      msg = " / ".join((bad.get("message") or "").strip().splitlines()[:3]).replace("%", "%25")
+                      print(f"::error title={module} {case.get('classname')}.{case.get('name')}::{msg[:900]}")
+          summary = f"{total} run, {failures} failures, {errors} errors, {skipped} skipped"
+          print(f"JVM unit tests: {summary}")
+          for row in rows:
+              print(f"  {row}")
+          print(f"::notice title=Kotlin JVM unit tests::{summary} | " + " | ".join(rows))
+          if total == 0:
+              print("::error::No JVM unit test results were produced")
+              raise SystemExit(1)
+          raise SystemExit(1 if (failures or errors) else 0)
+          PY
+          status=$?
+          for log in /tmp/animation-tests.log /tmp/module-tests.log; do
+            [ -f "$log" ] || continue
+            { grep -E "^(e: |> Task .*FAILED)|FAILED$|error: " "$log" || true; } | head -10 | while IFS= read -r line; do
+              echo "::error::${line//$'\r'/}"
+            done
+          done
+          exit $status
       - name: Build release APK
         if: ${{ inputs.release }}
         working-directory: android
@@ -76,3 +153,4 @@ jobs:
         run: |
           echo "### Android build" >> "$GITHUB_STEP_SUMMARY"
           echo "JDK 17 · Gradle 8.9 · AGP 8.7.3 · Kotlin 2.0.21 · Filament 1.75.1" >> "$GITHUB_STEP_SUMMARY"
+          echo "Playback: :animation:testDebugUnitTest covers play/pause/stop/seek/loop/speed" >> "$GITHUB_STEP_SUMMARY"

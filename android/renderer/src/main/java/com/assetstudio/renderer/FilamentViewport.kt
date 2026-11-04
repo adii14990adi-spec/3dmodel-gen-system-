@@ -68,6 +68,8 @@ class FilamentViewport(private val surfaceView: SurfaceView) :
 
     fun loadGlb(bytes: ByteBuffer) {
         destroyModel()
+        poseFrames = 0
+        lastAnimationError = ""
         modelViewer.loadModelGlb(bytes)
         modelViewer.transformToUnitCube()
         resetCamera()
@@ -76,15 +78,47 @@ class FilamentViewport(private val surfaceView: SurfaceView) :
 
     fun loadFile(path: String) = loadGlb(ByteBuffer.wrap(File(path).readBytes()))
 
+    /** Number of pose applications that really reached the skeleton (0 = nothing played). */
+    var poseFrames: Int = 0
+        private set
+
+    /** Last animator failure, surfaced in the playback report instead of being swallowed. */
+    var lastAnimationError: String = ""
+        private set
+
+    /** True once a GLB is loaded into the model viewer. */
+    fun hasAsset(): Boolean = runCatching { modelViewer.asset != null }.getOrDefault(false)
+
     fun animationCount(): Int = runCatching { modelViewer.animator?.getAnimationCount() ?: 0 }.getOrDefault(0)
     fun animationDuration(i: Int): Float = runCatching { modelViewer.animator?.getAnimationDuration(i) ?: 0f }.getOrDefault(0f)
     fun animationName(i: Int): String = runCatching { modelViewer.animator?.getAnimationName(i) ?: "clip_$i" }.getOrDefault("clip_$i")
 
-    fun applyAnimation(index: Int, seconds: Float) {
-        val animator = modelViewer.animator ?: return
+    /**
+     * Pose the skeleton at [seconds] of clip [index].
+     *
+     * @return true only when the gltfio animator accepted the time *and* the bone
+     * matrices were refreshed, so callers can tell real playback from a no-op.
+     */
+    fun applyAnimation(index: Int, seconds: Float): Boolean {
+        val animator = modelViewer.animator ?: run {
+            lastAnimationError = "This GLB has no animator (no animation data)"
+            return false
+        }
         val count = runCatching { animator.getAnimationCount() }.getOrDefault(0)
-        if (index !in 0 until count) return
-        runCatching { animator.applyAnimation(index, seconds); animator.updateBoneMatrices() }
+        if (index !in 0 until count) {
+            lastAnimationError = "Clip $index is outside 0..${count - 1}"
+            return false
+        }
+        return runCatching {
+            animator.applyAnimation(index, seconds)
+            animator.updateBoneMatrices()
+            poseFrames += 1
+            lastAnimationError = ""
+            true
+        }.getOrElse { error ->
+            lastAnimationError = error.message ?: error.javaClass.simpleName
+            false
+        }
     }
 
     fun applyRenderMode(mode: RenderMode) {

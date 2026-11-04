@@ -137,6 +137,82 @@ def kotlin_structure_issues(path: Path) -> list[str]:
     return issues
 
 
+PLAYBACK_REQUIRED_API = [
+    ("animator.applyAnimation", "the gltfio animator must be driven (not a static pose)"),
+    ("animator.updateBoneMatrices", "bone matrices must be refreshed after every pose"),
+    ("getAnimationCount", "clips must be enumerated from the loaded GLB"),
+    ("getAnimationDuration", "durations must come from the animator"),
+]
+PLAYBACK_FORBIDDEN = ["fakePlayback", "FakePlaybackAnimation", "staticPoseOnly",
+                      "dummyAnimation", "placeholderAnimation"]
+
+
+def playback_contract_issues() -> list[str]:
+    """Verify the playback milestone contract in the Kotlin sources.
+
+    Runtime playback cannot be proven here (no JDK/device), but the *contract* can:
+    the renderer must call the real animator, the transport must expose
+    play/pause/stop, the animation module must carry JVM tests, and no source may
+    substitute a static pose for an animation.
+    """
+    issues: list[str] = []
+    renderer = ANDROID / "renderer/src/main/java/com/assetstudio/renderer/FilamentViewport.kt"
+    text = renderer.read_text(encoding="utf-8") if renderer.is_file() else ""
+    if not text:
+        issues.append("FilamentViewport.kt is missing")
+    for token, why in PLAYBACK_REQUIRED_API:
+        if token not in text:
+            issues.append(f"FilamentViewport: missing '{token}' ({why})")
+    if "fun applyAnimation(index: Int, seconds: Float): Boolean" not in text:
+        issues.append("FilamentViewport: applyAnimation must report success instead of swallowing errors")
+    if "poseFrames" not in text:
+        issues.append("FilamentViewport: no pose-frame counter, so playback cannot be evidenced")
+
+    animation_dir = ANDROID / "animation/src/main/java/com/assetstudio/animation"
+    expected = {"AnimationController.kt", "PlaybackSession.kt",
+                "PlaybackRenderer.kt", "PlaybackValidation.kt"}
+    present = {p.name for p in animation_dir.glob("*.kt")} if animation_dir.is_dir() else set()
+    for name in sorted(expected - present):
+        issues.append(f":animation module is missing {name}")
+
+    controller = animation_dir / "AnimationController.kt"
+    if controller.is_file():
+        body = controller.read_text(encoding="utf-8")
+        for fn in ("fun play(", "fun pause(", "fun stop(", "fun tick(", "fun seek("):
+            if fn not in body:
+                issues.append(f"AnimationController: missing {fn}) transport function")
+
+    screen = ANDROID / "app/src/main/java/com/assetstudio/app/screens/ScreensB.kt"
+    if screen.is_file():
+        body = screen.read_text(encoding="utf-8")
+        for label in ('"Play"', '"Pause"', '"Stop"'):
+            if label not in body:
+                issues.append(f"Animation player screen: missing {label} control")
+        if "validatePlayback" not in body:
+            issues.append("Animation player screen: playback validation is not reachable")
+
+    tests = sorted((ANDROID / "animation/src/test").rglob("*.kt"))
+    if not tests:
+        issues.append(":animation has no JVM unit tests for the playback transport")
+    else:
+        joined = "\n".join(path.read_text(encoding="utf-8") for path in tests)
+        for expected_test in ("play then tick advances time", "looping wraps",
+                              "non-looping stops", "a renderer that cannot pose"):
+            if expected_test not in joined:
+                issues.append(f":animation tests do not cover '{expected_test}'")
+
+    for path in sorted(ANDROID.rglob("*.kt")):
+        body = path.read_text(encoding="utf-8")
+        for token in PLAYBACK_FORBIDDEN:
+            if token in body:
+                try:
+                    where = path.relative_to(ROOT)
+                except ValueError:
+                    where = path
+                issues.append(f"{where}: forbidden fake-playback marker '{token}'")
+    return issues
+
+
 def main() -> int:
     failures: list[str] = []
     for mod in MODULES:
@@ -168,6 +244,7 @@ def main() -> int:
     for path in kotlin_files:
         for issue in kotlin_structure_issues(path):
             failures.append(f"{path.relative_to(ROOT)}: {issue}")
+    failures.extend(playback_contract_issues())
     for f in failures:
         print("FAIL:", f)
     if failures:

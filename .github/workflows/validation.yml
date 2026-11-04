@@ -17,6 +17,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          # tests/unit/test_workflows.py diffs real commits, so the clone cannot be shallow
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with: { python-version: '3.11', cache: 'pip' }
       - uses: actions/setup-node@v4
@@ -38,7 +41,25 @@ jobs:
       - name: Official Khronos glTF Validator
         run: python -m processing.cli validate
       - name: Python test suite
-        run: pytest -q
+        # The verdict and the failing test ids are also emitted as check-run annotations,
+        # so a red run is diagnosable without downloading the (large) runner logs.
+        shell: bash
+        run: |
+          set -o pipefail
+          set +e
+          status=0
+          pytest -q 2>&1 | tee /tmp/pytest.log || status=$?
+          summary=$(grep -Eo "[0-9]+ (passed|failed|error)[^,]*" /tmp/pytest.log | tail -1)
+          echo "::notice title=Python test suite::${summary:-no summary line}"
+          if [ "$status" -ne 0 ]; then
+            { grep -E "^(FAILED|ERROR) " /tmp/pytest.log || true; } | head -8 | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            { grep -E "^E  " /tmp/pytest.log || true; } | head -4 | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+          fi
+          exit "$status"
       - name: Android source structure checks
         run: python scripts/check_android_sources.py
       - name: Upload validation reports

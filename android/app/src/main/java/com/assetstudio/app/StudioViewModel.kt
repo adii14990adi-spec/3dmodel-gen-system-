@@ -5,6 +5,10 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.assetstudio.animation.AnimationController
+import com.assetstudio.animation.PlaybackCategory
+import com.assetstudio.animation.PlaybackRenderer
+import com.assetstudio.animation.PlaybackReport
+import com.assetstudio.animation.PlaybackSession
 import com.assetstudio.core.model.*
 import com.assetstudio.data.db.CachedAssetEntity
 import com.assetstudio.data.prefs.StudioSettings
@@ -43,6 +47,25 @@ class StudioViewModel(app: Application) : AndroidViewModel(app) {
     lateinit var animationController: AnimationController
         private set
 
+    /** Playback transport + runtime validation evidence for the loaded GLB. */
+    val playbackSession: PlaybackSession get() = _playbackSession
+    private lateinit var _playbackSession: PlaybackSession
+
+    /**
+     * Adapter that exposes the live Filament viewport to the playback layer.
+     *
+     * It resolves the viewport lazily because the surface is created by Compose, and
+     * it reports failure (false) instead of faking a pose when nothing is bound.
+     */
+    private val playbackRenderer = object : PlaybackRenderer {
+        override val hasAsset: Boolean get() = viewport?.hasAsset() == true
+        override val clipCount: Int get() = viewport?.animationCount() ?: 0
+        override fun clipName(index: Int): String = viewport?.animationName(index) ?: ""
+        override fun clipDuration(index: Int): Float = viewport?.animationDuration(index) ?: 0f
+        override fun apply(index: Int, seconds: Float): Boolean =
+            viewport?.applyAnimation(index, seconds) == true
+    }
+
     private var refreshJob: Job? = null
 
     init {
@@ -50,6 +73,7 @@ class StudioViewModel(app: Application) : AndroidViewModel(app) {
             // Bound to the active FilamentViewport by the Animation Player screen.
             viewport?.applyAnimation(index, seconds)
         }
+        _playbackSession = PlaybackSession(animationController)
         viewModelScope.launch {
             container.settings.settings.collect { s ->
                 container.configure(s.apiBaseUrl, s.apiKey)
@@ -132,6 +156,35 @@ class StudioViewModel(app: Application) : AndroidViewModel(app) {
                     s.optInt("ERROR"), obj.optString("report"), list)) }
             }.onFailure { _ui.update { it.copy(report = com.assetstudio.core.model.ValidationInfo()) } }
     }
+
+    /**
+     * Load an exported GLB into the viewport and bind the clips the animator
+     * reports. The catalog's clip list is never used for playback: if the file does
+     * not contain the clip, the player must not show it.
+     */
+    fun loadPlaybackAsset(path: String, label: String) {
+        val target = viewport
+        if (target == null) {
+            animationController.fail("The 3D viewport is not ready yet.")
+            return
+        }
+        runCatching { target.loadFile(path) }
+            .onFailure { animationController.fail("Could not load $label: ${it.message}") }
+            .onSuccess { _playbackSession.attach(playbackRenderer, label) }
+    }
+
+    /** Pose every available clip three times and record what the animator did. */
+    fun validatePlayback(): PlaybackReport? {
+        if (viewport?.hasAsset() != true) {
+            animationController.fail("Load a GLB before validating playback.")
+            return null
+        }
+        return _playbackSession.validate()
+    }
+
+    /** Categories already validated on this device in this session. */
+    fun validatedPlaybackCategories(): Set<PlaybackCategory> =
+        _playbackSession.validatedCategories()
 
     fun bindAnimationClips() {
         val a = _ui.value.selectedAnimation ?: return

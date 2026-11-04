@@ -1,0 +1,41 @@
+{
+  "version": "1.0.0",
+  "description": "Explicit canonical-role -> source-bone map for the uploaded Mixamo rig (65 bones). The rig contains Spine/Spine1/Spine2 and finger chains, which the generic alias matcher reports as ambiguous (chest, left_hand, right_hand, toes). This map resolves the ambiguity deterministically instead of letting the pipeline guess. Fingers are intentionally not mapped: the game targets have no finger joints, so finger motion is dropped and reported.",
+  "source_skeleton": {
+    "bone_count": 65,
+    "root_bone": "mixamorig:Hips",
+    "naming": "mixamo",
+    "variants": 2,
+    "evidence": "All 74 uploaded FBX files carry the same 65 bone names and the same parent links. Rest-pose bone lengths split them into two proportional variants (skeleton groups skel_226dc3817c: 19 files, skel_534eaa02b3: 55 files, e.g. the LeftFoot offset is 0.4453 m vs 0.3824 m). The role map is name based, so it applies to both variants; each file is grouped separately in docs/animation-library/inventory.json."
+  },
+  "roles": {
+    "hips": "mixamorig:Hips",
+    "spine": "mixamorig:Spine",
+    "chest": "mixamorig:Spine2",
+    "neck": "mixamorig:Neck",
+    "head": "mixamorig:Head",
+    "left_shoulder": "mixamorig:LeftShoulder",
+    "left_upper_arm": "mixamorig:LeftArm",
+    "left_lower_arm": "mixamorig:LeftForeArm",
+    "left_hand": "mixamorig:LeftHand",
+    "right_shoulder": "mixamorig:RightShoulder",
+    "right_upper_arm": "mixamorig:RightArm",
+    "right_lower_arm": "mixamorig:RightForeArm",
+    "right_hand": "mixamorig:RightHand",
+    "left_upper_leg": "mixamorig:LeftUpLeg",
+    "left_lower_leg": "mixamorig:LeftLeg",
+    "left_foot": "mixamorig:LeftFoot",
+    "left_toe": "mixamorig:LeftToeBase",
+    "right_upper_leg": "mixamorig:RightUpLeg",
+    "right_lower_leg": "mixamorig:RightLeg",
+    "right_foot": "mixamorig:RightFoot",
+    "right_toe": "mixamorig:RightToeBase"
+  },
+  "unmapped_source_bones": "fingers (Thumb/Index/Middle/Ring/Pinky 1-4), HeadTop_End, Toe_End tips",
+  "limitations": [
+    "The uploads contain two proportional variants of the same naming scheme; grouping is per file, so a clip is never assumed compatible with another clip's rig without a matching fingerprint.",
+    "The uploaded rig rest pose is a T-pose with the arms along +X; the game targets use the same T-pose, but pelvis yaw differs per clip, so the retarget reproduces the source's absolute orientation rather than normalising the facing.",
+    "Finger and eye bones are not present on the targets and their motion is not exported.",
+    "Root motion is retargeted only for the hips joint (the only translated bone in the sources)."
+  ]
+}

@@ -1,0 +1,921 @@
+{
+  "assets": [
+    {
+      "action": "already_organized",
+      "asset_id": "anim_attack_9f79a4ee",
+      "category": "combat/melee",
+      "destination_path": "assets/animation/combat/melee/attack.bvh",
+      "error": "",
+      "relative_destination": "combat/melee/attack.bvh",
+      "sha256": "df4ddc69d6ea79f9bfe97927a3e25335ce89db650875cef560673d892c854295",
+      "size_bytes": 20019,
+      "source_path": "assets/animation/combat/attack.bvh",
+      "verified": true
+    },
+    {
+      "action": "already_organized",
+      "asset_id": "anim_death_121c9a16",
+      "category": "unclassified",
+      "destination_path": "assets/animation/unclassified/death.bvh",
+      "error": "",
+      "relative_destination": "unclassified/death.bvh",
+      "sha256": "4874aa245b27692946977acb6685d070b75a4065211a3dadf8a10fed0c2ad54b",
+      "size_bytes": 37176,
+      "source_path": "assets/animation/combat/death.bvh",
+      "verified": true
+    },
+    {
+      "action": "already_organized",
+      "asset_id": "anim_idle_71f8d343",
+      "category": "unclassified",
+      "destination_path": "assets/animation/unclassified/idle.bvh",
+      "error": "",
+      "relative_destination": "unclassified/idle.bvh",
+      "sha256": "8286d35dccb75e1f9d952753891f54e7498a5656c94f14ff2bd245325218ad1d",
+      "size_bytes": 47508,
+      "source_path": "assets/animation/locomotion/idle.bvh",
+      "verified": true
+    },
+    {
+      "action": "already_organized",
+      "asset_id": "anim_jump_9a89044e",
+      "category": "locomotion/unarmed/jump",
+      "destination_path": "assets/animation/locomotion/unarmed/jump/jump.bvh",
+      "error": "",
+      "relative_destination": "locomotion/unarmed/jump/jump.bvh",
+      "sha256": "f9290436b41440f39f2bded19f108fd875e63d1b9c7103d8732c17dfd3ba466a",
+      "size_bytes": 17499,
+      "source_path": "assets/animation/locomotion/jump.bvh",
+      "verified": true
+    },
+    {
+      "action": "already_organized",
+      "asset_id": "anim_run_72adf8f7",
+      "category": "unclassified",
+      "destination_path": "assets/animation/unclassified/run.bvh",
+      "error": "",
+      "relative_destination": "unclassified/run.bvh",
+      "sha256": "f838d837096a8d56cc6bc1f7cf5bc61a2c04b929bb2b6350da7b8b7fad109da7",
+      "size_bytes": 22539,
+      "source_path": "assets/animation/locomotion/run.bvh",
+      "verified": true
+    },
+    {
+      "action": "already_organized",
+      "asset_id": "anim_different_naming_df935399",
+      "category": "unclassified",
+      "destination_path": "assets/animation/unclassified/different_naming.bvh",
+      "error": "",
+      "relative_destination": "unclassified/different_naming.bvh",
+      "sha256": "50e1228d9c90fc87d9552519558b861766dd58dbf9e32522acbd0e477ee52088",
+      "size_bytes": 27579,
+      "source_path": "assets/animation/other/different_naming.bvh",
+      "verified": true
+    },
+    {
+      "action": "already_organized",
+      "asset_id": "anim_embedded_clips_8d6a03b8",
+      "category": "unclassified",
+      "destination_path": "assets/animation/unclassified/embedded_clips.glb",
+      "error": "",
+      "relative_destination": "unclassified/embedded_clips.glb",
+      "sha256": "486c3dc6a0044e0842520547283bd5adf2681ca54c0c68ddaf22773bc9a93ef3",
+      "size_bytes": 6128,
+      "source_path": "assets/animation/other/embedded_clips.glb",
+      "verified": true
+    },
+    {
+      "action": "already_organized",
+      "asset_id": "anim_quadruped_228375ba",
+      "category": "unclassified",
+      "destination_path": "assets/animation/unclassified/quadruped.bvh",
+      "error": "",
+      "relative_destination": "unclassified/quadruped.bvh",
+      "sha256": "7c4eb0f61376823341497726583b2a196e560a9c5ad8f23b8f8ec358aea19ce6",
+      "size_bytes": 8341,
+      "source_path": "assets/animation/other/quadruped.bvh",
+      "verified": true
+    }
+  ],
+  "counts": {
+    "copy": 8,
+    "skipped": 161
+  },
+  "generated_at": "2026-11-04T07:38:49.657241+00:00",
+  "policy": {
+    "copy": "copy2 + SHA-256 verification of both sides",
+    "duplicates": "byte-identical sources are recorded, not copied twice",
+    "originals": "never modified, moved or deleted",
+    "overwrite": "refused when the destination bytes differ"
+  },
+  "schema_version": "1.0.0",
+  "skipped": [
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/crouch_walk/Crouch Walking.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/Crouch Walking.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/other/traversal/Dive Roll.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/Dive Roll.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/combat/reactions/death/Dying.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/Dying.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/other/interaction/Grab And Put Back Rifle.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/Grab And Put Back Rifle.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/unarmed/prone_idle/Prone Idle.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/Prone Idle.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/run/Running To Stop.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/Running To Stop.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/unarmed/run/Running.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/Running.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/other/traversal/Skateboarding.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/Skateboarding.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/other/swim/Swimming.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/Swimming.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/unarmed/crouch_turn/crouching turn 90 left.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/crouching turn 90 left.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/unarmed/crouch_turn/crouching turn 90 right.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/crouching turn 90 right.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/combat/reactions/death/death crouching headshot front.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/death crouching headshot front.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/combat/reactions/death/death from back headshot.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/death from back headshot.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/combat/reactions/death/death from front headshot.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/death from front headshot.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/combat/reactions/death/death from right.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/death from right.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/combat/reactions/death/death from the back.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/death from the back.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/combat/reactions/death/death from the front.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/death from the front.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/combat/rifle/fire/firing rifle.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/firing rifle.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/combat/reactions/hit/hit reaction.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/hit reaction.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/combat/rifle/aim/idle aiming.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/idle aiming.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/combat/rifle/aim/idle crouching aiming.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/idle crouching aiming.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/crouch_idle/idle crouching.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/idle crouching.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/idle/idle.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/idle.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/jump/jump down.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/jump down.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/jump/jump loop.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/jump loop.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/jump/jump up.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/jump up.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/combat/rifle/reload/reloading.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/reloading.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/combat/rifle/aim/rifle aiming idle.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/rifle aiming idle.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/jump/rifle jump.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/rifle jump.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/run/rifle run.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/rifle run.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/run/run backward left.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/run backward left.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/run/run backward right.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/run backward right.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/run/run backward.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/run backward.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/run/run backwards.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/run backwards.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/run/run forward left.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/run forward left.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/run/run forward right.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/run forward right.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/run/run forward.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/run forward.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/run/run left.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/run left.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/run/run right.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/run right.fbx"
+    },
+    {
+      "detail": "",
+      "reason": "no_category",
+      "source_path": "assets/animation/Upload/showcase_all.glb"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/unarmed/sprint/sprint backward left.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/sprint backward left.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/unarmed/sprint/sprint backward right.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/sprint backward right.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/unarmed/sprint/sprint backward.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/sprint backward.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/unarmed/sprint/sprint forward left.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/sprint forward left.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/unarmed/sprint/sprint forward right.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/sprint forward right.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/unarmed/sprint/sprint forward.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/sprint forward.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/unarmed/sprint/sprint left.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/sprint left.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/unarmed/sprint/sprint right.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/sprint right.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/run/strafe (2).fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/strafe (2).fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/walk/strafe left.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/strafe left.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/walk/strafe right.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/strafe right.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/run/strafe.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/strafe.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/unarmed/walk/toss grenade.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/toss grenade.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/unarmed/turn/turn 90 left.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/turn 90 left.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/unarmed/turn/turn 90 right.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/turn 90 right.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/unclassified/turn left.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/turn left.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/unclassified/turning right 45 degrees.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/turning right 45 degrees.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/walk/walk backward left.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/walk backward left.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/walk/walk backward right.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/walk backward right.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/walk/walk backward.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/walk backward.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/crouch_walk/walk crouching backward left.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/walk crouching backward left.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/crouch_walk/walk crouching backward right.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/walk crouching backward right.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/crouch_walk/walk crouching backward.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/walk crouching backward.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/crouch_walk/walk crouching forward left.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/walk crouching forward left.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/crouch_walk/walk crouching forward right.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/walk crouching forward right.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/crouch_walk/walk crouching forward.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/walk crouching forward.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/crouch_walk/walk crouching left.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/walk crouching left.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/crouch_walk/walk crouching right.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/walk crouching right.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/walk/walk forward left.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/walk forward left.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/walk/walk forward right.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/walk forward right.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/walk/walk forward.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/walk forward.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/walk/walk left.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/walk left.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/walk/walk right.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/walk right.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/walk/walking backwards.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/walking backwards.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/rifle/walk/walking.fbx",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/Upload/walking.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/combat/attack.bvh",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/combat/melee/attack.bvh"
+    },
+    {
+      "detail": "combat/reactions/death/Dying.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/combat/reactions/death/Dying.fbx"
+    },
+    {
+      "detail": "combat/reactions/death/death crouching headshot front.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/combat/reactions/death/death crouching headshot front.fbx"
+    },
+    {
+      "detail": "combat/reactions/death/death from back headshot.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/combat/reactions/death/death from back headshot.fbx"
+    },
+    {
+      "detail": "combat/reactions/death/death from front headshot.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/combat/reactions/death/death from front headshot.fbx"
+    },
+    {
+      "detail": "combat/reactions/death/death from right.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/combat/reactions/death/death from right.fbx"
+    },
+    {
+      "detail": "combat/reactions/death/death from the back.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/combat/reactions/death/death from the back.fbx"
+    },
+    {
+      "detail": "combat/reactions/death/death from the front.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/combat/reactions/death/death from the front.fbx"
+    },
+    {
+      "detail": "combat/reactions/hit/hit reaction.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/combat/reactions/hit/hit reaction.fbx"
+    },
+    {
+      "detail": "combat/rifle/aim/idle aiming.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/combat/rifle/aim/idle aiming.fbx"
+    },
+    {
+      "detail": "combat/rifle/aim/idle crouching aiming.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/combat/rifle/aim/idle crouching aiming.fbx"
+    },
+    {
+      "detail": "combat/rifle/aim/rifle aiming idle.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/combat/rifle/aim/rifle aiming idle.fbx"
+    },
+    {
+      "detail": "combat/rifle/fire/firing rifle.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/combat/rifle/fire/firing rifle.fbx"
+    },
+    {
+      "detail": "combat/rifle/reload/reloading.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/combat/rifle/reload/reloading.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/crouch_idle/idle crouching.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/crouch_idle/idle crouching.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/crouch_walk/Crouch Walking.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/crouch_walk/Crouch Walking.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/crouch_walk/walk crouching backward left.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/crouch_walk/walk crouching backward left.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/crouch_walk/walk crouching backward right.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/crouch_walk/walk crouching backward right.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/crouch_walk/walk crouching backward.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/crouch_walk/walk crouching backward.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/crouch_walk/walk crouching forward left.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/crouch_walk/walk crouching forward left.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/crouch_walk/walk crouching forward right.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/crouch_walk/walk crouching forward right.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/crouch_walk/walk crouching forward.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/crouch_walk/walk crouching forward.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/crouch_walk/walk crouching left.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/crouch_walk/walk crouching left.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/crouch_walk/walk crouching right.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/crouch_walk/walk crouching right.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/idle/idle.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/idle/idle.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/jump/jump down.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/jump/jump down.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/jump/jump loop.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/jump/jump loop.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/jump/jump up.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/jump/jump up.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/jump/rifle jump.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/jump/rifle jump.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/run/Running To Stop.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/run/Running To Stop.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/run/rifle run.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/run/rifle run.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/run/run backward left.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/run/run backward left.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/run/run backward right.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/run/run backward right.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/run/run backward.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/run/run backward.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/run/run backwards.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/run/run backwards.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/run/run forward left.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/run/run forward left.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/run/run forward right.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/run/run forward right.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/run/run forward.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/run/run forward.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/run/run left.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/run/run left.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/run/run right.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/run/run right.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/run/strafe (2).fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/run/strafe (2).fbx"
+    },
+    {
+      "detail": "locomotion/rifle/run/strafe.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/run/strafe.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/walk/strafe left.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/walk/strafe left.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/walk/strafe right.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/walk/strafe right.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/walk/walk backward left.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/walk/walk backward left.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/walk/walk backward right.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/walk/walk backward right.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/walk/walk backward.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/walk/walk backward.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/walk/walk forward left.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/walk/walk forward left.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/walk/walk forward right.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/walk/walk forward right.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/walk/walk forward.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/walk/walk forward.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/walk/walk left.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/walk/walk left.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/walk/walk right.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/walk/walk right.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/walk/walking backwards.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/walk/walking backwards.fbx"
+    },
+    {
+      "detail": "locomotion/rifle/walk/walking.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/rifle/walk/walking.fbx"
+    },
+    {
+      "detail": "locomotion/unarmed/crouch_turn/crouching turn 90 left.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/unarmed/crouch_turn/crouching turn 90 left.fbx"
+    },
+    {
+      "detail": "locomotion/unarmed/crouch_turn/crouching turn 90 right.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/unarmed/crouch_turn/crouching turn 90 right.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/jump.bvh",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/locomotion/unarmed/jump/jump.bvh"
+    },
+    {
+      "detail": "locomotion/unarmed/prone_idle/Prone Idle.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/unarmed/prone_idle/Prone Idle.fbx"
+    },
+    {
+      "detail": "locomotion/unarmed/run/Running.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/unarmed/run/Running.fbx"
+    },
+    {
+      "detail": "locomotion/unarmed/sprint/sprint backward left.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/unarmed/sprint/sprint backward left.fbx"
+    },
+    {
+      "detail": "locomotion/unarmed/sprint/sprint backward right.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/unarmed/sprint/sprint backward right.fbx"
+    },
+    {
+      "detail": "locomotion/unarmed/sprint/sprint backward.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/unarmed/sprint/sprint backward.fbx"
+    },
+    {
+      "detail": "locomotion/unarmed/sprint/sprint forward left.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/unarmed/sprint/sprint forward left.fbx"
+    },
+    {
+      "detail": "locomotion/unarmed/sprint/sprint forward right.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/unarmed/sprint/sprint forward right.fbx"
+    },
+    {
+      "detail": "locomotion/unarmed/sprint/sprint forward.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/unarmed/sprint/sprint forward.fbx"
+    },
+    {
+      "detail": "locomotion/unarmed/sprint/sprint left.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/unarmed/sprint/sprint left.fbx"
+    },
+    {
+      "detail": "locomotion/unarmed/sprint/sprint right.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/unarmed/sprint/sprint right.fbx"
+    },
+    {
+      "detail": "locomotion/unarmed/turn/turn 90 left.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/unarmed/turn/turn 90 left.fbx"
+    },
+    {
+      "detail": "locomotion/unarmed/turn/turn 90 right.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/unarmed/turn/turn 90 right.fbx"
+    },
+    {
+      "detail": "locomotion/unarmed/walk/toss grenade.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/unarmed/walk/toss grenade.fbx"
+    },
+    {
+      "detail": "locomotion/unarmed/walk/walk.bvh",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/unarmed/walk/walk.bvh"
+    },
+    {
+      "detail": "locomotion/unarmed/walk/walk_fast.bvh",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/locomotion/unarmed/walk/walk_fast.bvh"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/unarmed/walk/walk.bvh",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/locomotion/walk.bvh"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/unarmed/walk/walk_fast.bvh",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/locomotion/walk_fast.bvh"
+    },
+    {
+      "detail": "other/interaction/Grab And Put Back Rifle.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/other/interaction/Grab And Put Back Rifle.fbx"
+    },
+    {
+      "detail": "other/swim/Swimming.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/other/swim/Swimming.fbx"
+    },
+    {
+      "detail": "other/traversal/Dive Roll.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/other/traversal/Dive Roll.fbx"
+    },
+    {
+      "detail": "other/traversal/Skateboarding.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/other/traversal/Skateboarding.fbx"
+    },
+    {
+      "detail": "identical to assets/animation/combat/death.bvh",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/unclassified/death.bvh"
+    },
+    {
+      "detail": "identical to assets/animation/other/different_naming.bvh",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/unclassified/different_naming.bvh"
+    },
+    {
+      "detail": "identical to assets/animation/other/embedded_clips.glb",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/unclassified/embedded_clips.glb"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/idle.bvh",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/unclassified/idle.bvh"
+    },
+    {
+      "detail": "identical to assets/animation/other/quadruped.bvh",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/unclassified/quadruped.bvh"
+    },
+    {
+      "detail": "identical to assets/animation/locomotion/run.bvh",
+      "reason": "duplicate_content",
+      "source_path": "assets/animation/unclassified/run.bvh"
+    },
+    {
+      "detail": "unclassified/turn left.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/unclassified/turn left.fbx"
+    },
+    {
+      "detail": "unclassified/turning right 45 degrees.fbx",
+      "reason": "already_in_place",
+      "source_path": "assets/animation/unclassified/turning right 45 degrees.fbx"
+    }
+  ],
+  "source_archive": "assets/animation/Upload",
+  "target_root": "assets/animation"
+}
