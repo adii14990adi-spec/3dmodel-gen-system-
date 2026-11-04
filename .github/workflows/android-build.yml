@@ -166,6 +166,7 @@ jobs:
         # Runs the real client code (CatalogClient + AssetDownloader) against the live
         # site the APK ships in BuildConfig.CATALOG_BASE_URL. Skipped with a warning when
         # the site is not reachable, so a Pages outage cannot block an APK build.
+        working-directory: android
         env:
           ASSET_STUDIO_LIVE_BASE_URL: https://adii14990adi-spec.github.io/3dmodel-gen-system-
         run: |
@@ -189,7 +190,7 @@ jobs:
           python3 - <<'PY'
           import glob, pathlib, xml.etree.ElementTree as ET
           total = failures = 0
-          for report in glob.glob("android/asset-library/build/test-results/**/TEST-*LiveCatalogSmokeTest.xml",
+          for report in glob.glob("asset-library/build/test-results/**/TEST-*LiveCatalogSmokeTest.xml",
                                   recursive=True):
               root = ET.parse(report).getroot()
               total += int(root.get("tests", 0))
