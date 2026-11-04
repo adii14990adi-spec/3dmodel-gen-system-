@@ -352,6 +352,24 @@ def test_discovery_publishes_each_content_hash_once():
         "two paths with identical content would be published under two asset ids")
 
 
+def test_discovery_stays_unique_without_the_organizer_plan(monkeypatch):
+    """``reports/`` is git-ignored, so CI has no organization mapping at all.
+
+    Without the plan every path in the tree is a candidate, and the archive copies
+    plus their byte-identical twins would be published under two asset ids.
+    """
+    from processing import cli
+    from processing.common import sha256_file
+
+    monkeypatch.setattr(cli, "_MAPPING_CACHE", {}, raising=False)
+    files = cli._discover("animation")
+    hashes = [sha256_file(path) for path in files]
+    assert files, "the organized tree must yield processable sources without a plan"
+    assert len(hashes) == len(set(hashes)), (
+        "discovery must collapse byte-identical twins even when no plan was generated")
+    assert not [f for f in files if "/Upload/" in str(f).replace("\\", "/")]
+
+
 def test_upload_archive_is_not_processed_twice():
     from processing.cli import _discover
     files = _discover("animation")

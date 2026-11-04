@@ -41,6 +41,10 @@ def _discover(kind: str) -> list[Path]:
     # sources that were re-homed are skipped in favour of their copy, byte-identical
     # twins are skipped in favour of the canonical one, and a file the organiser has
     # never seen (freshly dropped in) is still processed so nothing goes silent.
+    # The plan itself is generated into ``reports/`` (git-ignored), so on a fresh
+    # checkout - CI, a clean clone - there is no plan at all and the loop below would
+    # select every path. ``_dedupe_by_content()`` enforces the one-source-per-hash
+    # invariant independently of the plan.
     canonical = {asset["destination_path"] for asset in mapping.get("assets", [])
                  if asset.get("destination_path") and (ROOT / asset["destination_path"]).is_file()}
     # A source the planner left in place *is* its own canonical copy.
@@ -67,7 +71,39 @@ def _discover(kind: str) -> list[Path]:
         if relative in rehomed:
             continue  # re-homed or byte-identical to a canonical copy
         selected.append(path)
-    return selected
+    return _dedupe_by_content(selected, canonical)
+
+
+def _relative_name(path: Path) -> str:
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return str(path)
+
+
+def _dedupe_by_content(paths: list[Path], canonical: set[str]) -> list[Path]:
+    """Keep exactly one source per content hash, preferring the organized copy.
+
+    ``asset_id()`` mixes the source path into the id, so two byte-identical paths
+    would be published twice under two different asset ids. That must not depend on
+    the organizer's plan existing, because the plan lives in the git-ignored
+    ``reports/`` tree: without this pass a clean checkout would process the archive
+    copies and their twins.
+    """
+    ordered = sorted(paths, key=lambda path: (0 if _relative_name(path) in canonical else 1,
+                                              str(path)))
+    kept: dict[str, Path] = {}
+    for path in ordered:
+        try:
+            key = sha256_file(path)
+        except OSError:
+            key = f"unreadable:{path}"
+        kept.setdefault(key, path)
+    duplicates = len(ordered) - len(kept)
+    if duplicates:
+        log("DISCOVER", f"skipped {duplicates} byte-identical source(s) already covered "
+                        f"by another path")
+    return sorted(kept.values())
 
 
 def _is_relative_to(path: Path, parent: Path) -> bool:

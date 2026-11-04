@@ -161,7 +161,12 @@ file that looks like an animation:
   tree, and a source skipped as `duplicate_content` is skipped in favour of the
   canonical twin — so the same bytes can never be published under two asset ids;
 * a file the organiser has never seen (dropped in without running `organize`) is
-  still processed, so nothing goes silent.
+  still processed, so nothing goes silent;
+* discovery ends with a content-hash pass (`processing.cli._dedupe_by_content`),
+  because the organiser's plan lives in the git-ignored `reports/` tree. On a fresh
+  checkout — CI, or a clean clone — there is no plan, so without that pass the
+  archive copies and their byte-identical twins would both be published under two
+  asset ids (`asset_id()` mixes the source path into the id).
 
 ### Processing workflow (`.github/workflows/animation-processing.yml`)
 
