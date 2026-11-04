@@ -307,21 +307,34 @@ def main(argv: list[str] | None = None) -> int:
               f"deps={asset['dependencies']}")
     print(f"dependencies        {result['verified_dependencies']} sidecar(s) verified "
           f"({', '.join(result['verified_roles']) or 'none'})")
-    if args.probe:
-        http = result.get("http") or {}
+    http = result.get("http") or {}
+    if args.probe and http:
+        # One annotation per role is what GitHub keeps (it stores only the first ten per
+        # run), so report the catalog plus the first URL of every sidecar role.
         kinds = {"glb": "GLB", "gltf": "glTF", "bin": "BIN", "png": "PNG"}
-        for position, entry in enumerate(http.values(), start=1):
-            url = entry["url"]
+
+        def label_of(url: str) -> str:
             if url.endswith("/catalog/index.json"):
-                label = "catalog"
-            elif "/catalog/" in url and url.endswith(".json"):
-                label = "manifest"
-            else:
-                label = kinds.get(url.split(".")[-1].split("?")[0], "-")
-            print(f"::notice title=Live HTTP {position} ({label})::{entry['url']} -> "
-                  f"HTTP {entry['status']}, {entry['bytes']} bytes, "
-                  f"{entry['content_type'] or 'no content-type'}, "
-                  f"sha256={entry['sha256'][:16]}…")
+                return "catalog"
+            if "/catalog/" in url and url.endswith(".json"):
+                return "manifest"
+            return kinds.get(url.split(".")[-1].split("?")[0], "-")
+
+        wanted = ["catalog", "manifest", "GLB", "glTF", "BIN", "PNG"]
+        seen: dict[str, dict[str, Any]] = {}
+        for entry in http.values():
+            seen.setdefault(label_of(entry["url"]), entry)
+        for label in [name for name in wanted if name in seen]:
+            entry = seen[label]
+            print(f"::notice title=Live {label}, HTTP {entry['status']}::{entry['url']} -> "
+                  f"{entry['bytes']} bytes, {entry['content_type'] or 'no content-type'}, "
+                  f"sha256={entry['sha256']}")
+        print(f"::notice title=Live catalog summary::{result['counts']['models']} model(s), "
+              f"{result['counts']['animations']} animation(s), "
+              f"{len(result['verified_assets'])} asset(s) and "
+              f"{result['verified_dependencies']} sidecar(s) verified "
+              f"(roles: {', '.join(result['verified_roles']) or 'none'}), "
+              f"{len(http)} URL(s) fetched over HTTPS")
     print("PASS: GitHub Pages catalog, manifests, GLBs and glTF sidecars all verified")
 
     if args.report:

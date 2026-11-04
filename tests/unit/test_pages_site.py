@@ -310,13 +310,19 @@ def test_probe_mode_reports_the_http_evidence_per_url(served_site, capsys):
                  "--probe", "--report", str(site.parent / "report.json")]) == 0
 
     printed = capsys.readouterr().out
-    notices = [line for line in printed.splitlines() if line.startswith("::notice title=Live HTTP")]
+    notices = [line for line in printed.splitlines()
+               if line.startswith("::notice title=Live ")]
     assert notices, printed
-    labels = {line.split("(", 1)[1].split(")")[0] for line in notices}
-    # The catalog, a per-asset manifest, the GLB and the glTF sidecars are all covered.
-    assert {"catalog", "manifest", "GLB"} <= labels
-    assert any("-> HTTP 200," in line for line in notices)
-    assert all("sha256=" in line for line in notices)
+    # GitHub keeps only the first ten annotations of a run, so the evidence is one line
+    # per role: the catalog, a manifest, the GLB and the glTF sidecars.
+    roles = [line.split("title=Live ", 1)[1].split(",")[0] for line in notices
+             if "HTTP 200::" in line]
+    assert roles == sorted(set(roles), key=roles.index), roles  # no duplicates
+    assert {"catalog", "manifest", "GLB", "glTF"} <= set(roles)
+    assert all("HTTP 200::" in line and "sha256=" in line for line in notices
+               if "summary" not in line)
+    summary = next(line for line in notices if "summary" in line)
+    assert "sidecar(s) verified" in summary and "URL(s) fetched over HTTPS" in summary
     report = json.loads((site.parent / "report.json").read_text())
     assert report["http"], "the report keeps the per-URL evidence"
 
@@ -328,4 +334,4 @@ def test_probe_mode_stays_quiet_for_a_site_directory_check(tree, tmp_path, capsy
     write_site(built, site)
 
     assert main(["--base-url", BASE, "--site-dir", str(site), "--probe"]) == 0
-    assert "::notice title=Live HTTP" not in capsys.readouterr().out
+    assert "::notice title=Live " not in capsys.readouterr().out
