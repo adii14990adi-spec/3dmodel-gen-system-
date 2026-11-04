@@ -98,6 +98,21 @@ class CatalogClientTest {
     }
 
     @Test
+    fun `the cache timestamp is reported for a fetched document`() = runTest {
+        server.enqueue(MockResponse().setResponseCode(200).setBody(indexJson))
+        val before = System.currentTimeMillis()
+
+        client.index(base())
+
+        val stamped = client.cachedAt("${base()}/catalog/index.json")
+        assertTrue("a fetched document must report when it was cached", stamped != null)
+        assertTrue("the timestamp must be plausible: $stamped",
+            stamped!! in before..System.currentTimeMillis() + 1_000)
+        // A URL that was never fetched has no timestamp at all.
+        org.junit.Assert.assertNull(client.cachedAt("${base()}/catalog/models/unknown.json"))
+    }
+
+    @Test
     fun `the cached catalog is reused when the pages host is unreachable`() = runTest {
         server.enqueue(MockResponse().setBody(indexBody()))
         client.index(base())

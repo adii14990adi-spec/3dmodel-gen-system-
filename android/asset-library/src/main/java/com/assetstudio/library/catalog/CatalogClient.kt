@@ -70,8 +70,13 @@ class CatalogClient(
         }
 
     /** When the cached copy of [url] was last validated, or null when never fetched. */
-    fun cachedAt(url: String): Long? = metaFile(url).takeIf { it.isFile }?.let {
-        runCatching { it.readText().trim().toLong() }.getOrNull()
+    fun cachedAt(url: String): Long? = metaFile(url).takeIf { it.isFile }?.let { meta ->
+        // The sidecar holds `fetched=<epoch millis>` and optionally `etag=…`; parsing the
+        // whole file as a number (which is what the library screen used to do) always
+        // failed and hid the "last refreshed" timestamp from the UI.
+        meta.readLines()
+            .firstOrNull { it.startsWith("fetched=") }
+            ?.removePrefix("fetched=")?.trim()?.toLongOrNull()
     }
 
     private suspend fun get(url: String, forceRefresh: Boolean): CatalogDocument =
