@@ -1,5 +1,6 @@
 package com.assetstudio.library.catalog
 
+import com.assetstudio.library.BuildConfig
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json

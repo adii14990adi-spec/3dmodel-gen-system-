@@ -133,7 +133,7 @@ class AssetRepository(
         val document = documentFor(id)
         val metadata = document.optJSONObject("metadata") ?: JSONObject()
         ModelDetail(
-            summary(document.toSummary("model", id)),
+            document.toSummary("model", id),
             MetadataParser.geometry(metadata.optJSONObject("geometry")),
             MetadataParser.materials(metadata.optJSONArray("materials")),
             MetadataParser.textures(metadata.optJSONArray("textures")),
